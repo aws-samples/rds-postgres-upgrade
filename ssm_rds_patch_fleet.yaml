@@ -1,0 +1,80 @@
+schemaVersion: '0.3'
+description: Upgrade RDS PostgreSQL instances with a specific tag using Cloud9
+parameters:
+  AssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: arn:aws:iam::624745698860:role/rp-ssm-rds-patch-role
+  EngineUpgradePath:
+    type: String
+    description: Engine upgrade path
+  RunPreUpgradeTasks:
+    type: String
+    description: Whether to run pre-upgrade tasks (PRE) or upgrade tasks (UPG)
+    default: PRE
+    allowedValues:
+      - PRE
+      - UPG
+  Cloud9EnvironmentId:
+    type: String
+    description: The ID of the existing Cloud9 environment
+  S3BucketName:
+    type: String
+    description: The name of the S3 bucket containing the script and logs
+  S3ScriptKey:
+    type: String
+    description: The S3 key (path) to the shell script
+    default: rds_psql_patch.sh
+  ScriptsDir:
+    type: String
+    description: The directory where scripts will be stored
+    default: /tmp/rds_patch
+  SnsTopicArnEmail:
+    type: String
+    description: SNS Topic ARN for email notifications
+assumeRole: '{{ AssumeRole }}'
+mainSteps:
+  - name: DownloadAndSaveScript
+    action: aws:runCommand
+    nextStep: UpgradeInstances
+    isEnd: false
+    onFailure: Abort
+    inputs:
+      DocumentName: AWS-RunShellScript
+      InstanceIds:
+        - '{{ Cloud9EnvironmentId }}'
+      Parameters:
+        commands:
+          - |
+            aws s3 cp s3://{{ S3BucketName }}/{{ S3ScriptKey }} {{ ScriptsDir }}/rds_psql_patch.sh
+            chmod +x {{ ScriptsDir }}/rds_psql_patch.sh
+  - name: UpgradeInstances
+    action: aws:runCommand
+    isEnd: true
+    onFailure: Abort
+    inputs:
+      DocumentName: AWS-RunShellScript
+      InstanceIds:
+        - '{{ Cloud9EnvironmentId }}'
+      Parameters:
+        commands:
+          - |
+            #!/bin/bash
+            INSTANCES=$(aws rds describe-db-instances --filters "Name=engine,Values=postgres" --query 'DBInstances[].[DBInstanceIdentifier]' --output text)
+            echo "INSTANCES=${INSTANCES}"
+            COUNT=0
+            for INSTANCE in $INSTANCES; do
+              cd {{ ScriptsDir }}
+              export SCRIPTS_DIR={{ ScriptsDir }}
+              export S3_BUCKET_PATCH_LOGS={{ S3BucketName }}
+              export SNS_TOPIC_ARN_EMAIL={{ SnsTopicArnEmail }}
+              ./rds_psql_patch.sh "$INSTANCE" {{ EngineUpgradePath }} {{ RunPreUpgradeTasks }}
+              COUNT=$((COUNT+1))
+            done
+            echo "Upgrade initiated for $COUNT instances"
+    outputs:
+      - Name: Summary
+        Selector: $.StandardOutputContent
+        Type: String
+outputs:
+  - UpgradeInstances.Summary

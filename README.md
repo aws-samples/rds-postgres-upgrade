@@ -18,21 +18,21 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ## Architecture Diagrams
 
-Single RDS PostgreSQL instance:
+Upgrade single RDS PostgreSQL instance:
 
 ![rds-psql-patch-arch.png](./rds-psql-patch-arch.png)
 
-Fleet of RDS PostgreSQL instance using AWS Systems Manager:
+Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 
 ![rds-psql-patch-arch-ssm.png](./rds-psql-patch-arch-ssm.png)
 
 ## Flow Charts
 
-Upgrade Process Flow Chart for single RDS PostgreSQL instance:
+Upgrade single RDS PostgreSQL instance:
 
 ![rds-psql-upgrade-flow-chart.png](./rds-psql-upgrade-flow-chart.png)
 
-Upgrade Process Flow Chart for fleet of RDS PostgreSQL instance using AWS Systems Manager:
+Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 
 ![rds-psql-upgrade-flow-chart-fleet.png](./rds-psql-upgrade-flow-chart-fleet.png)
 

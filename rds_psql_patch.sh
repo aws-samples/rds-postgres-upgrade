@@ -13,7 +13,7 @@
 #        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPG >logs/upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 #
 # Pre-requisites: 
-# 	1. cloud9 or ec2 instance should have below installed:
+# 	1. ec2 instance should have below installed:
 #            AWS CLI
 #            PSQL client utility
 #            jq library

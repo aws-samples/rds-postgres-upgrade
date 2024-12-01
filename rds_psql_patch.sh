@@ -1,7 +1,7 @@
 #!/bin/bash
 ##-------------------------------------------------------------------------------------
 #
-# Purpose: To upgrade  RDS databases (RDS-PostgreSQL only)
+# Purpose: To patch/upgrade RDS databases (RDS-PostgreSQL only) - Supports Minor and Major version upgrades.
 #
 # Usage: ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
 #        ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]

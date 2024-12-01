@@ -18,7 +18,7 @@
 #        - EC2 instance for running this script
 #        - IAM profile attached to EC2 instance with necessary permissions
 #              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create a policy and role. 
-#              * Attached this IAM role to ec2 instance.
+#              * Attach this IAM role to ec2 instance.
 #        - RDS instance(s) with:
 #              * VPC configuration
 #              * Subnet group(s)

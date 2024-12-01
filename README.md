@@ -53,7 +53,8 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
      1. AWS Resources Required:
         - EC2 instance for running this script
         - IAM profile attached to EC2 instance with necessary permissions
-              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create a policy and role. 
+              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create a policy and role.
+                   ** Modify resource names appropriately
               * Attach this IAM role to ec2 instance.
         - RDS instance(s) with:
               * VPC configuration
@@ -62,6 +63,7 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
               * Parameter group
               * Secrets Manager secret
               * "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
+                   ** Modify resource names appropriately
         - AWS Secrets Manager secret attached to each RDS instance
         - S3 bucket for upgrade logs
         - SNS topic for notifications

@@ -38,7 +38,7 @@
 #        - PostgreSQL client utilities
 #        - jq for JSON processing
 #
-#	   4. Update environment variables "manual" section if/as needed (optional)
+#     4. Update environment variables "manual" section if/as needed (optional)
 #
 # Functions:
 #     wait_till_available - funtion to check DBInstance status

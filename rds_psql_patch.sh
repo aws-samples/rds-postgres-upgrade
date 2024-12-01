@@ -7,11 +7,11 @@
 #        ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 #
 #       	PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
-#        UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
+#        	UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
 #
 # Example Usage:
-#        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PREUPGRADE >logs/pre-upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-#        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPGRADE >logs/upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+#        nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+#        nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 #
 # Prerequisites:
 #     1. AWS Resources Required:

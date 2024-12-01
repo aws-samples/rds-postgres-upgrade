@@ -48,62 +48,44 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
    ```
 3. Explore the scripts and documentation to set up the automation process.
 
-## Usage
+4. Prerequisites:
+   
+     1. AWS Resources Required:
+        - EC2 instance for running this script
+        - IAM profile attached to EC2 instance with necessary permissions
+              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create a policy and role. 
+              * Attached this IAM role to ec2 instance.
+        - RDS instance(s) with:
+              * VPC configuration
+              * Subnet group(s)
+              * Security group(s)
+              * Parameter group
+              * Secrets Manager secret
+              * "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
+        - AWS Secrets Manager secret attached to each RDS instance
+        - S3 bucket for upgrade logs
+        - SNS topic for notifications
 
-    ```bash 
-    ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [run-pre-check]
-    ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PRE|UPG]
-    ```
+     2. Network Configuration:
+        - Database security group must allow inbound traffic from EC2 instance
 
-    nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PRE >logs/pre-upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-    nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPG >logs/upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-    
-## Architecture Diagrams
+     3. Required Tools:
+        - AWS CLI
+        - PostgreSQL client utilities
+        - jq for JSON processing
 
-## Prerequisites
+     4. Update environment variables "manual" section if/as needed (optional)
 
-    EC2 instance with the following installed:
+     5. Usage: 
+         ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
+         ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 
-        AWS CLI
-        PSQL client utility
-        jq library
+         PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
+         UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
 
-    Update environment variables if/as needed.
-
-## Functions
-
-    The script includes the following functions:
-
-        wait_till_available: Check DBInstance status
-        create_param_group: Create parameter group
-        db_upgrade: Upgrade DBInstance
-        db_modify_logs: Add DB logs to CloudWatch
-        db_pending_maint: Check pending maintenance status
-        get_rds_creds: Retrieve DB credentials from secret manager
-        copy_logs_to_s3: Copy upgrade files to S3 bucket for future reference
-        db_snapshot: Take DB snapshot/backup if required
-        run_psql_command: Run analyze/vacuum freeze commands
-        run_psql_drop_repl_slot: Check and drop replication slot in PSQL if exists (applies to MAJOR version upgrade only)
-        check_upgrade_type: Determine if upgrade/patching path is MINOR or MAJOR
-        update_extensions: Update PostgreSQL extensions
-        send_email: Send email
-        get_db_info: Get database related info into local variables
-
-## Environment Variables
-    current_db_instance_id: First input parameter
-    next_engine_version: Second input parameter
-    run_pre_upg_tasks: Third input parameter (converted to uppercase)
-    LOGS_DIR: Directory for logs
-    AWS_CLI: Path to AWS CLI
-    PSQL_BIN: Path to PSQL binary
-    db_snapshot_required: Set to "Y" if manual snapshot is required
-    db_parameter_modify: Set to "Y" if security and replication related parameters need to be enabled
-    DATE_TIME: Current date and time
-
-## Notes
-    The script checks for the correct number of input arguments and validates the third parameter.
-    It sets an email subject based on whether it's running pre-upgrade tasks or the actual upgrade.
-    The script includes error handling for incorrect input parameters.
+     6. Example Usage:
+           nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+           nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 
 ## AWS Systems Manager Automation
 

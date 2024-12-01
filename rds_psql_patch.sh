@@ -4,21 +4,41 @@
 # Purpose: To upgrade  RDS databases (RDS-PostgreSQL only)
 #
 # Usage: ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
-#        ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PRE|UPG]
+#        ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 #
-#       	PRE = Run pre-requisite tasks, and do NOT run upgrade tasks
-#        UPG = Do not run pre-requisite tasks, but run upgrade tasks
+#       	PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
+#        UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
 #
-#        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PRE >logs/pre-upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-#        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPG >logs/upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+# Example Usage:
+#        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PREUPGRADE >logs/pre-upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+#        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPGRADE >logs/upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 #
-# Pre-requisites: 
-# 	1. ec2 instance should have below installed:
-#            AWS CLI
-#            PSQL client utility
-#            jq library
+# Prerequisites:
+#     1. AWS Resources Required:
+#        - EC2 instance for running this script
+#        - IAM profile attached to EC2 instance with necessary permissions
+#              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create a policy and role. 
+#              * Attached this IAM role to ec2 instance.
+#        - RDS instance(s) with:
+#              * VPC configuration
+#              * Subnet group(s)
+#              * Security group(s)
+#              * Parameter group
+#              * Secrets Manager secret
+#              * "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
+#        - AWS Secrets Manager secret attached to each RDS instance
+#        - S3 bucket for upgrade logs
+#        - SNS topic for notifications
 #
-#	2. Update environment variables if/as needed.
+#     2. Network Configuration:
+#        - Database security group must allow inbound traffic from EC2 instance
+#
+#     3. Required Tools:
+#        - AWS CLI
+#        - PostgreSQL client utilities
+#        - jq for JSON processing
+#
+#	   4. Update environment variables "manual" section if/as needed (optional)
 #
 # Functions:
 #     wait_till_available - funtion to check DBInstance status
@@ -35,6 +55,7 @@
 #     update_extensions - function to update PostgreSQL extensions
 #     send_email - send email
 #     get_db_info - get database related info into local variables
+#     version_to_number - function to convert version number to integer
 #
 ##-------------------------------------------------------------------------------------
 
@@ -49,38 +70,45 @@ LOGS_DIR="./logs"
 
 ##-------------------------------------------------------------------------------------
 
-# Environment Variables - Software binaries #
+# Environment Variables - Software binaries - Manual #
 AWS_CLI=`which aws`
 PSQL_BIN=`which psql`
 
-###-------------------------------------------------------------------------------------
-
-# Environment Variables - Misc. #
+# Environment Variables - Misc. - Manual #
 db_snapshot_required="Y"  # set this to Y if manual snapshot is required #
 db_parameter_modify="N"  # set this to Y if security and replication related parameters needs to be enabled; if not set it to N. Used in create_param_group function #
 DATE_TIME=`date +'%Y%m%d-%H-%M-%S'`
 
 ##-------------------------------------------------------------------------------------
 
+# check number of input arguments #
+if [ ! $# -eq 3 ]; then
+    echo -e "\nERROR: Incorrect syntax; Three (3) parameters expected."
+    echo -e "\nUsage: ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [PREUPGRADE|UPGRADE]"
+    echo -e "Example:"
+    echo -e "       ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PREUPGRADE"
+    echo -e "       ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPGRADE\n"
+    exit 1
+fi
+
+# validate 3rd argument/parameter #
+if [ ! "${run_pre_upg_tasks}" = "PREUPGRADE" ] && [ ! "${run_pre_upg_tasks}" = "UPGRADE" ]; then
+    echo -e "\nERROR: Invalid 3rd parameter. Expected value PREUPGRADE|UPGRADE."
+    echo -e "\nUsage: ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [PREUPGRADE|UPGRADE]"
+    echo -e "Example:"
+    echo -e "       ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PREUPGRADE"
+    echo -e "       ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPGRADE\n"
+    exit 1
+fi
+
+# Display input parameters for verification
 echo ""
 echo "INFO: Input parameter 1: $current_db_instance_id"
 echo "INFO: Input parameter 2: $next_engine_version"
 echo "INFO: Input parameter 3: $run_pre_upg_tasks"
 echo ""
 
-# check number of input arguments #
-if [ ! $# -eq 3 ]; then
-    echo -e "\nERROR: Incorrect syntax; Three (3) parameters expected.\n"
-    exit 1
-fi
-
-# validate 3rd argument/parameter #
-if [ ! "${run_pre_upg_tasks}" = "PRE" ] && [ ! "${run_pre_upg_tasks}" = "UPG" ]; then
-    echo -e "\nERROR: Invalid 2nd parameter. Expected value PRE|UPG. Process aborted.\n"
-    exit 1
-fi
-
-if [ "${run_pre_upg_tasks}" = "PRE" ]; then
+if [ "${run_pre_upg_tasks}" = "PREUPGRADE" ]; then
    EMAIL_SUBJECT="RDS PostgreSQL DB Pre-Upgrade Tasks"
 else
    EMAIL_SUBJECT="RDS PostgreSQL DB Upgrade"
@@ -90,6 +118,17 @@ echo -e "\nBEGIN -  ${EMAIL_SUBJECT} - `date`"
 
 ##-------------------------------------------------------------------------------------
 # functions #
+##-------------------------------------------------------------------------------------
+
+# function to convert version number to integer
+version_to_number() {
+    # Force base 10 interpretation by prepending "10#"
+    #echo "$1" | tr -d . | xargs printf "%06d" | sed 's/^/10#/'
+
+    local version_num=$(echo "$1" | tr -d .)
+    echo $((10#$version_num))  # Force base 10 interpretation inside arithmetic expansion
+
+}
 ##-------------------------------------------------------------------------------------
 
 # funtion to check DBInstance status #
@@ -332,7 +371,7 @@ function db_pending_maint() {
 
 }
 ##-------------------------------------------------------------------------------------
-# function to retrieve DB creds from secret manageret #
+# function to retrieve DB creds from secret manager #
 function get_rds_creds() {
 
    echo -e "\nINFO: Execute get_rds_creds function...\n"
@@ -495,14 +534,14 @@ function db_snapshot() {
 # function to send email #
 function send_email() {
 
-    echo -e "\nINFO: Execute send_email function...\n"
-
    if [ -n "${SNS_TOPIC_ARN_EMAIL}" ]; then
                     
+      echo -e "\nINFO: Execute send_email function...\n"
+
       ${AWS_CLI} sns publish \
-          --topic-arn ${SNS_TOPIC_ARN_EMAIL} \
-	  --message "Please check logfile(s) in S3 bucket:   ${S3_LOGS_DIR}" \
-          --subject "${EMAIL_SUBJECT} [${current_db_instance_id}] - Completed"
+            --topic-arn ${SNS_TOPIC_ARN_EMAIL} \
+	         --message "Please check logfile(s) in S3 bucket:   ${S3_LOGS_DIR}" \
+            --subject "${EMAIL_SUBJECT} [${current_db_instance_id}] - Completed"
 
     fi
 
@@ -526,16 +565,19 @@ function check_upgrade_type() {
       echo "current_engine_version = $current_engine_version"
 
       # if family is greater, then major version upgrade #
-      if [ $((next_engine_version_family)) -gt $((current_engine_version_family)) ]; then
+      #if [ $((next_engine_version_family)) -gt $((current_engine_version_family)) ]; then
+      if [[ $(version_to_number "$next_engine_version_family") -gt $(version_to_number "$current_engine_version_family") ]]; then
             #echo "Create new parameter group"
             UPGRADE_SCOPE="major"
             echo "UpgradeScope = ${UPGRADE_SCOPE}"
             #create_param_group
       else # if family is same, then check if minor version to patch is appropriate #
-	      if [[ (( $current_engine_version = $next_engine_version )) ]]; then
+	      #if [[ (( $current_engine_version = $next_engine_version )) ]]; then
+         if [[ $(version_to_number "$current_engine_version") -eq $(version_to_number "$next_engine_version") ]]; then
             	     echo -e "\nINFO: Current and next DB versions are same. Upgrade NOT required.\n"
 	 	     exit 0
-	      elif [[ (( $current_engine_version > $next_engine_version )) ]]; then
+	      #elif [[ (( $current_engine_version > $next_engine_version )) ]]; then
+         elif [[ $(version_to_number "$current_engine_version") -gt $(version_to_number "$next_engine_version") ]]; then
 		     echo -e "\nINFO: Current DB version is greater than next DB version. Upgrade NOT required.\n"
 		     exit 0
 	     else # if $current_engine_version < $next_engine_version #
@@ -545,7 +587,7 @@ function check_upgrade_type() {
                      echo "UpgradeScope = ${UPGRADE_SCOPE}"
 
             	     db_param_group_name=${current_db_param_group}
-	    fi
+	      fi
 
       fi
 
@@ -691,7 +733,7 @@ if [ "${current_engine_type}" = "postgres" ]; then
    ## Take DB snapshot
    ## Run Freeze
    ## Create DB parameter group if major version upgrade
-   if [ "${run_pre_upg_tasks}" = "PRE" ]; then
+   if [ "${run_pre_upg_tasks}" = "PREUPGRADE" ]; then
 
       if [ "${UPGRADE_SCOPE}" = "major" ]; then
          echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"

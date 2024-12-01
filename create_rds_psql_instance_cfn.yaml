@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  RDSParameterGroup:
+    Type: 'AWS::RDS::DBParameterGroup'
+    Properties:
+      DBParameterGroupName: rds-psql-patch-instance-v14-param-group-3
+      Family: postgres14
+      Description: "rds postgresql instance v14 parameter group 3"
+      Tags:
+        - Key: Name
+          Value: rds-psql-patch-instance-v14-param-group-3
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
+
+  RDSInstance:
+    Type: 'AWS::RDS::DBInstance'
+    DependsOn: RDSParameterGroup
+    Properties:
+      DBInstanceIdentifier: rds-psql-patch-instance-3
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      EngineVersion: '14.9'
+      MasterUsername: postgres
+      ManageMasterUserPassword: true
+      DBParameterGroupName: !Ref RDSParameterGroup
+      AllocatedStorage: 200
+      BackupRetentionPeriod: 7
+      MultiAZ: true
+      VPCSecurityGroups: 
+        - sg-04d00ee62424bdb65
+      DBSubnetGroupName: rds-psql-patch-test-db-subnet-group
+      DBName: rdspatch
+      Tags:
+        - Key: Name
+          Value: rds-psql-patch-instance-3
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'

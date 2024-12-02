@@ -6,6 +6,9 @@ Resources:
       DBParameterGroupName: rds-psql-patch-instance-v14-param-group-1
       Family: postgres14
       Description: "rds postgresql instance v14 parameter group 1"
+      Parameters:
+        rds.force_ssl: 1  # Forces SSL connections
+        rds.logical_replication: 1  # Enables logical replication
       Tags:
         - Key: Name
           Value: rds-psql-patch-instance-v14-param-group-1
@@ -30,6 +33,7 @@ Resources:
         - sg-04d00ee62424bdb65
       DBSubnetGroupName: rds-psql-patch-test-db-subnet-group
       DBName: rdspatch
+      StorageEncrypted: true
       Tags:
         - Key: Name
           Value: rds-psql-patch-instance-1

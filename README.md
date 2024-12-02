@@ -93,8 +93,6 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
      6. Example Usage:
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-
-     7. Log files:
       
 ## AWS Systems Manager Automation
 
@@ -109,7 +107,27 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 4. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
     * Provide appropriate input parameters
 
-7. Log files
+## Log Files
+
+PREUPGRADE:
+
+| Log File Type | Purpose | Sample File Name |
+|---------------|---------|-------------------|
+| Pre-upgrade Execution Log | Main execution log for pre-upgrade tasks | pre-upgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
+| Freeze Task Log | Log of VACUUM FREEZE command execution | run_db_task_freeze-20230615-14-30-45.log |
+
+
+UPGRADE:
+
+| Log File Type | Purpose | Sample File Name |
+|---------------|---------|-------------------|
+| Upgrade Execution Log | Main execution log for upgrade tasks | upgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
+| Current DB Configuration Backup | Backup of current DB configuration before upgrade | db_current_config_backup_postgres15-20230615-14-30-45.txt |
+| Replication Slot Drop Log | Log of replication slot drop operation (major upgrades only) | drop_replication_slot_20230615-14-30-45.log |
+| Extension Update Log | Log of PostgreSQL extension updates | update_db_extensions_20230615-14-30-45.log |
+| Analyze Task Log | Log of ANALYZE command execution | run_db_task_analyze-20230615-14-30-45.log |
+| Unfreeze Task Log | Log of VACUUM (unfreeze) command execution | run_db_task_unfreeze-20230615-14-30-45.log |
+
 
 ## Disclaimer
 

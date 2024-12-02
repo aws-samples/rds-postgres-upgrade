@@ -96,13 +96,16 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 
 ## AWS Systems Manager Automation
 
-To integrate the upgrade process with AWS Systems Manager, we have provided a YAML file that defines the automation workflow. The YAML file includes the following steps:
+1. Upload shell script to S3 bucket
 
-    Perform prerequisite checks
-    Upgrade the RDS instance
-    Validate the upgrade process
+2. Create SSM IAM policy and role using CFN [create_ssm_rds_patch_iam_policy_role.yaml]
+    * Modify resource names appropriately
 
-You can customize the YAML file to fit your specific requirements, such as adding additional validation steps or integrating with your monitoring and alerting systems.
+3. Create SSM automation document using CFN [create_ssm_rds_patch_automation_document.yaml]
+    * Modify resource names appropriately
+
+4. Execute automation document "RDSPostgreSQLFleetUpgrade"
+    * Provide appropriate input parameters
 
 ## Disclaimer
 

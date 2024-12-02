@@ -36,9 +36,9 @@ Resources:
               - rds:AddTagsToResource
               - rds:ListTagsForResource
             Resource: 
-              - arn:aws:rds:*:*:db:*rds-psql-patch-*
-              - arn:aws:rds:*:*:pg:*rds-psql-patch-*
-              - arn:aws:rds:*:*:snapshot:*rds-psql-patch-*
+              - arn:aws:rds:*:*:db:*
+              - arn:aws:rds:*:*:pg:*
+              - arn:aws:rds:*:*:snapshot:*
           - Effect: Allow
             Action:
               - iam:CreateRole

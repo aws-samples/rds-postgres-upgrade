@@ -89,6 +89,9 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
          PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
          UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
 
+         Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
+               for appropirate minor or major supported verion (a.k.a appropirate upgrade path)
+
      6. Example Usage:
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &

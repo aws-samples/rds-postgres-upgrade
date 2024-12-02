@@ -1,7 +1,7 @@
 Parameters:
   EC2InstanceId:
     Type: String
-    Description: ID of the EC2 instance to attach the profile to (e.g., i-067d8667e6fa35938)
+    Description: ID of the EC2 instance to attach the profile to (e.g., i-0000d8667e6fa999999)
     AllowedPattern: ^i-[a-zA-Z0-9]+$
     ConstraintDescription: Must be a valid EC2 instance ID starting with 'i-'
 

@@ -1,23 +1,27 @@
 #!/bin/bash
 ##-------------------------------------------------------------------------------------
 #
-# Purpose: To patch/upgrade RDS databases (RDS-PostgreSQL only) - Supports Minor and Major version upgrades.
+# Purpose: To upgrade  RDS databases (RDS-PostgreSQL only)
 #
 # Usage: ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
 #        ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 #
 #       	PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
-#        	UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
+#           UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
+#           
+#           Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
+#                 for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
 #
 # Example Usage:
-#        nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-#        nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+#        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PREUPGRADE >logs/pre-upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+#        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPGRADE >logs/upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 #
 # Prerequisites:
 #     1. AWS Resources Required:
 #        - EC2 instance for running this script
 #        - IAM profile attached to EC2 instance with necessary permissions
 #              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create a policy and role. 
+#                    ** Modify resource names appropriately
 #              * Attach this IAM role to ec2 instance.
 #        - RDS instance(s) with:
 #              * VPC configuration
@@ -26,6 +30,7 @@
 #              * Parameter group
 #              * Secrets Manager secret
 #              * "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
+#                    ** Modify resource names appropriately
 #        - AWS Secrets Manager secret attached to each RDS instance
 #        - S3 bucket for upgrade logs
 #        - SNS topic for notifications
@@ -38,7 +43,7 @@
 #        - PostgreSQL client utilities
 #        - jq for JSON processing
 #
-#     4. Update environment variables "manual" section if/as needed (optional)
+#	   4. Update environment variables "manual" section if/as needed (optional)
 #
 # Functions:
 #     wait_till_available - funtion to check DBInstance status
@@ -280,7 +285,7 @@ function db_upgrade() {
 	return_value=""
 
 	# backup current DB config #
-	${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} >${LOGS_DIR}/${current_db_instance_id}/${current_db_instance_id}-${current_engine_type}${current_engine_version_family}-${DATE_TIME}.txt
+	${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} >${LOGS_DIR}/${current_db_instance_id}/db_current_config_backup_${current_engine_type}${current_engine_version_family}-${DATE_TIME}.txt
 
 	echo -e "\n${AWS_CLI} rds modify-db-instance \
                 --db-instance-identifier ${current_db_instance_id} \
@@ -331,46 +336,57 @@ function db_modify_logs() {
 
 }
 ##-------------------------------------------------------------------------------------
-#
+
 # function to check pending maintenance status #
 function db_pending_maint() {
 
-   echo -e "\nINFO: Execute db_pending_maint function...\n"
-   return_value=""
+    echo -e "\nINFO: Execute db_pending_maint function...\n"
+    local return_value=""
 
-   # run upgrade only when db status is available and there are no pending maintenace tasks #
-   #pending_maintenance_tasks=$( ${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --query 'DBInstances[].{PendingModifiedValues:PendingModifiedValues}' --output text )
-   db_instance_arn=$( ${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --query 'DBInstances[].{DBInstanceArn:DBInstanceArn}' --output text )
-   echo "db_instance_arn = $db_instance_arn"
+    # Get DB instance ARN
+    db_instance_arn=$( ${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --query 'DBInstances[].{DBInstanceArn:DBInstanceArn}' --output text )
+    echo "db_instance_arn = $db_instance_arn"
 
-   pending_maintenance_tasks=$( ${AWS_CLI} rds describe-pending-maintenance-actions --resource-identifier ${db_instance_arn} --output text )
-   echo "PendingMaintTasks = ${pending_maintenance_tasks}"
+    # Check pending maintenance tasks
+    pending_maintenance_tasks=$( ${AWS_CLI} rds describe-pending-maintenance-actions --resource-identifier ${db_instance_arn} --output text )
+    echo "PendingMaintTasks = ${pending_maintenance_tasks}"
 
-   if [ "${pending_maintenance_tasks}" != "" ]; then
+    if [ "${pending_maintenance_tasks}" != "" ]; then
+        # Perform OS related maintenance only - system-update
+        echo -e "\nINFO: PendingMaintApply - BEGIN - $(date)"
+        
+        # Capture both stdout and stderr
+        maintenance_output=$( ${AWS_CLI} rds apply-pending-maintenance-action \
+            --resource-identifier ${db_instance_arn} \
+            --apply-action system-update \
+            --opt-in-type immediate 2>&1 )
+        return_value=$?
+        
+        # Check if the error message contains the expected error
+        if echo "${maintenance_output}" | grep -q "There is no pending system-update action"; then
+            echo "INFO: No pending system updates available - this is expected"
+            return_value="0"
+        else
+            echo "${maintenance_output}"
+        fi
 
-      # peform OS related maintenance only  - system-update #
-      # db-upgrade, system-update #
-      echo -e "\nINFO: PendingMaintApply - BEGIN - `date`"
-      ${AWS_CLI} rds apply-pending-maintenance-action --resource-identifier ${db_instance_arn} --apply-action system-update --opt-in-type immediate
-      return_value="$?"
-      echo "PendingMaintApply ReturnValue = ${return_value}"
+        echo "PendingMaintApply ReturnValue = ${return_value}"
 
-      if [ "${return_value}" = "0" ] || [ "${return_value}" = "254" ]; then
-        echo -e "\nINFO: No pending maintenance."
-      else
-         exit 1
-       fi
+        if [ "${return_value}" = "0" ] || [ "${return_value}" = "254" ]; then
+            echo -e "\nINFO: No pending maintenance."
+        else
+            exit 1
+        fi
 
-      # wait until DB instance status is available #
-      wait_till_available
-      echo "INFO: PendingMaintApply - END - `date`"
-
-      echo ""
-
-   fi
+        # wait until DB instance status is available
+        wait_till_available
+        echo "INFO: PendingMaintApply - END - $(date)"
+        echo ""
+    fi
 
 }
 ##-------------------------------------------------------------------------------------
+
 # function to retrieve DB creds from secret manager #
 function get_rds_creds() {
 
@@ -387,86 +403,214 @@ function get_rds_creds() {
 function run_psql_command() {
 
    echo -e "\nINFO: Execute run_psql_command function...\n"
-   # get DB creds from secret manager # 
-   get_rds_creds
 
-   # if no DB credentials found in secret manager, do not run analyze; throwing a warning"
-   if [[ "${db_user1}" = "" || "${db_user2}" = "" ]]; then
+    # Create log file path
+    local log_file="${LOGS_DIR}/${current_db_instance_id}/run_db_task_${1,,}-${DATE_TIME}.log"
+    # ${LOGS_DIR}/${current_db_instance_id}/${current_db_instance_id}-[analyze|freeze|unfreeze]-${DATE_TIME}.log
 
-      echo "WARN: DB credetials NOT found. DB ${1} will NOT run."
+    # Ensure log directory exists
+    mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
 
-   else
+    # Initialize command status
+    local cmd_status=0
+    local cmd=""
 
-      if [ "${1}" = "ANALYZE" ]; then
+    {
+        echo "================================================================"
+        echo "PostgreSQL Command Execution Log - Started at $(date)"
+        echo "================================================================"
+        echo "Command Type: ${1}"
+        echo "Database Instance: ${current_db_instance_id}"
+        echo "Database Name: ${db_name}"
+        echo "Log File: ${log_file}"
+        echo "----------------------------------------------------------------"
 
-      	 # PSQL connect to DB to run analyze command #
-         echo -e "\nPSQL - ANALYZE DATABASE...\n"
-      	 echo -e "PSQL-statement = ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -p ${db_port} -d ${db_name} -a -c 'ANALYZE VERBOSE'\n"
-      	 ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -p ${db_port} -d ${db_name} -a -c 'ANALYZE VERBOSE' >"${LOGS_DIR}/${current_db_instance_id}/${current_db_instance_id}-db-analyze-${DATE_TIME}.out" 2>&1
+        # Get DB credentials
+        echo "INFO: Retrieving database credentials..."
+        get_rds_creds
 
-      elif [ "${1}" = "FREEZE" ]; then
+        # Validate DB credentials
+        if [[ -z "${db_user1}" || -z "${db_user2}" ]]; then
+            echo "WARNING: Database credentials NOT found. Command ${1} will NOT run."
+            echo "----------------------------------------------------------------"
+            return 1
+        fi
+        echo "INFO: Database credentials retrieved successfully."
 
-      	 # PSQL connect to DB to run vacuum freeze command #
-         echo -e "\nPSQL - VACUUM FREEZE...\n"
-      	 echo -e "PSQL-statement = ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -p ${db_port} -d ${db_name} -a -c 'VACUUM FREEZE VERBOSE'\n"
-      	 ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -p ${db_port} -d ${db_name} -a -c 'VACUUM FREEZE VERBOSE' >"${LOGS_DIR}/${current_db_instance_id}/${current_db_instance_id}-vacuum-freeze-${DATE_TIME}.out" 2>&1
+        # Test database connection
+        echo "INFO: Testing database connection..."
+        if ! "${PSQL_BIN}" -U "${db_user1}" -h "${db_endpoint}" -p "${db_port}" \
+            -d "${db_name}" -c '\q' >/dev/null 2>&1
+        then
+            echo "ERROR: Failed to connect to database"
+            echo "----------------------------------------------------------------"
+            return 1
+        fi
+        echo "INFO: Database connection successful"
 
-      elif [ "${1}" = "UNFREEZE" ]; then
-      	 # PSQL connect to DB to run vacuum UnFreeze command #
-         echo -e "\nPSQL - VACUUM UN-FREEZE...\n"
-      	 echo -e "PSQL-statement = ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -p ${db_port} -d ${db_name} -a -c 'VACUUM VERBOSE'\n"
-      	 ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -p ${db_port} -d ${db_name} -a -c 'VACUUM VERBOSE' >"${LOGS_DIR}/${current_db_instance_id}/${current_db_instance_id}-vacuum-unfreeze-${DATE_TIME}.out" 2>&1
+        # Execute command based on input parameter
+        case "${1}" in
+            "ANALYZE")
+                echo -e "\nINFO: Executing ANALYZE VERBOSE command..."
+                cmd="ANALYZE VERBOSE"
+                ;;
+            "FREEZE")
+                echo -e "\nINFO: Executing VACUUM FREEZE VERBOSE command..."
+                cmd="VACUUM FREEZE VERBOSE"
+                ;;
+            "UNFREEZE")
+                echo -e "\nINFO: Executing VACUUM VERBOSE command..."
+                cmd="VACUUM VERBOSE"
+                ;;
+            *)
+                echo "ERROR: Invalid command type: ${1}"
+                echo "Valid options are: ANALYZE, FREEZE, UNFREEZE"
+                echo "----------------------------------------------------------------"
+                return 1
+                ;;
+        esac
 
-      fi
+        # Log and execute the command
+        echo "Executing command: ${PSQL_BIN} -h ${db_endpoint} -p ${db_port} -d ${db_name} -a -c '${cmd}'"
+        echo "----------------------------------------"
+        echo "Command execution started at: $(date)"
+        
+        # Execute PostgreSQL command
+        if ! "${PSQL_BIN}" -U "${db_user1}" -h "${db_endpoint}" -p "${db_port}" \
+            -d "${db_name}" -a -c "\timing on" -c "${cmd}" 2>&1
+        then
+            cmd_status=$?
+            echo "Command failed with status: ${cmd_status}"
+        fi
 
-   fi
-   echo ""
+        echo "Command execution completed at: $(date)"
+        echo "----------------------------------------"
 
+        # Check command execution status
+        if [ ${cmd_status} -eq 0 ]; then
+            echo "SUCCESS: ${1} command completed successfully"
+        else
+            echo "ERROR: ${1} command failed with exit status ${cmd_status}"
+        fi
+
+        echo "----------------------------------------------------------------"
+        echo "Operation completed at: $(date)"
+        echo "================================================================"
+        echo ""
+
+    } 2>&1 | tee "${log_file}"
+
+    return ${cmd_status}
 }
 ##-------------------------------------------------------------------------------------
 
 # drop replication slot in PSQL if exists (applies to MAJOR version upgrade only) #
 function run_psql_drop_repl_slot() {
 
-   echo -e "\nINFO: Execute run_psql_drop_repl_slot function...\n"
-   #echo "PSQL - Drop replication slot..."
+    echo -e "\nINFO: Execute run_psql_drop_repl_slot function...\n"
 
-   # get DB creds from secret manager #
-   get_rds_creds
+    # Create log file path
+    local log_file="${LOGS_DIR}/${current_db_instance_id}/drop_replication_slot_${DATE_TIME}.log"
 
-   # if no DB credentials found in secret manager, do not run analyze; throwing a warning"
-   #if [ "${db_user2}" = "" ]; then
-   if [[ "${db_user1}" = "" || "${db_user2}" = "" ]]; then
+    # Ensure log directory exists
+    mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
 
-      echo "ERROR: DB credetials NOT found. MAJOR version upgrade will NOT run if there are one or more replication slots."
+    {
+        echo "================================================================"
+        echo "Replication Slot Drop Operation Log - Started at $(date)"
+        echo "================================================================"
+        echo "Database Instance: ${current_db_instance_id}"
+        echo "Log File: ${log_file}"
+        echo "----------------------------------------------------------------"
 
-   else
+        # Get DB credentials from secret manager
+        echo "INFO: Retrieving database credentials..."
+        get_rds_creds
 
-      # check if replication slot(s) exists #
-      repl_slot_count=`${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -d ${db_name} -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots"`
-      echo "repl_slot_count = $repl_slot_count"
+        # Validate DB credentials
+        if [[ -z "${db_user1}" || -z "${db_user2}" ]]; then
+            echo "ERROR: Database credentials NOT found."
+            echo "ERROR: MAJOR version upgrade will NOT run if there are one or more replication slots."
+            echo "----------------------------------------------------------------"
+            return 1
+        fi
+        echo "INFO: Database credentials retrieved successfully."
 
-      # check if replication slot(s) exists #
-      #repl_slot_count=`${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -d ${db_name} -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots"`
-      #echo "repl_slot_count = $repl_slot_count"
+        # Check for existing replication slots
+        echo "INFO: Checking for existing replication slots..."
+        repl_slot_count=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots" 2>&1)
+        
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to query replication slots:"
+            echo "${repl_slot_count}"
+            return 1
+        fi
 
-      # drop replication slot(s) #
-      if [ $repl_slot_count -gt 0 ]; then
-         # capture replication slot name and related details #
-         ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -d ${db_name} -c "SELECT * FROM pg_replication_slots" >"${LOGS_DIR}/${current_db_instance_id}/${current_db_instance_id}-db-repl_slot-${DATE_TIME}.out" 2>&1
+        echo "INFO: Current replication slot count = ${repl_slot_count}"
 
-         # drop replication slot(s) #
-         ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -d ${db_name} -c "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN (SELECT slot_name FROM pg_replication_slots)" >>"${LOGS_DIR}/${current_db_instance_id}/${current_db_instance_id}-db-repl_slot-${DATE_TIME}.out" 2>&1
+        # Process replication slots if they exist
+        if [ "${repl_slot_count}" -gt 0 ]; then
+            echo "INFO: Found ${repl_slot_count} replication slot(s). Processing..."
+            
+            # Log current replication slots
+            echo "INFO: Capturing current replication slot details..."
+            echo "Current replication slots:"
+            echo "----------------------------------------"
+            ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
+                -c "SELECT slot_name, plugin, slot_type, database, active, xmin FROM pg_replication_slots"
+            echo "----------------------------------------"
 
-         # check if replication slot(s) exists #
-         repl_slot_count=`${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -d ${db_name} -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots"`
-         echo "repl_slot_count [AFTER DROP] = $repl_slot_count"
+            # Drop replication slots
+            echo "INFO: Dropping replication slots..."
+            drop_result=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
+                -c "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN (SELECT slot_name FROM pg_replication_slots)" 2>&1)
+            
+            if [ $? -ne 0 ]; then
+                echo "ERROR: Failed to drop replication slots:"
+                echo "${drop_result}"
+                return 1
+            fi
 
-      fi
+            echo "Drop operation result:"
+            echo "----------------------------------------"
+            echo "${drop_result}"
+            echo "----------------------------------------"
 
-   fi
-   echo ""
+            # Verify slots were dropped
+            echo "INFO: Verifying replication slots after drop operation..."
+            echo "Remaining replication slots:"
+            echo "----------------------------------------"
+            ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
+                -c "SELECT slot_name, plugin, slot_type, database, active, xmin FROM pg_replication_slots"
+            echo "----------------------------------------"
 
+            # Final count verification
+            final_count=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots")
+            
+            if [ $? -ne 0 ]; then
+                echo "ERROR: Failed to get final replication slot count"
+                return 1
+            fi
+
+            echo "INFO: Final replication slot count = ${final_count}"
+
+            if [ "${final_count}" -eq 0 ]; then
+                echo "SUCCESS: All replication slots were successfully dropped."
+            else
+                echo "WARNING: ${final_count} replication slots still remain."
+            fi
+        else
+            echo "INFO: No replication slots found. No action needed."
+        fi
+
+        echo "----------------------------------------------------------------"
+        echo "Operation completed at: $(date)"
+        echo "================================================================"
+        echo ""
+
+    } 2>&1 | tee "${log_file}"
+
+    return 0
 }
 ##-------------------------------------------------------------------------------------
 
@@ -565,18 +709,15 @@ function check_upgrade_type() {
       echo "current_engine_version = $current_engine_version"
 
       # if family is greater, then major version upgrade #
-      #if [ $((next_engine_version_family)) -gt $((current_engine_version_family)) ]; then
       if [[ $(version_to_number "$next_engine_version_family") -gt $(version_to_number "$current_engine_version_family") ]]; then
             #echo "Create new parameter group"
             UPGRADE_SCOPE="major"
             echo "UpgradeScope = ${UPGRADE_SCOPE}"
             #create_param_group
       else # if family is same, then check if minor version to patch is appropriate #
-	      #if [[ (( $current_engine_version = $next_engine_version )) ]]; then
          if [[ $(version_to_number "$current_engine_version") -eq $(version_to_number "$next_engine_version") ]]; then
             	     echo -e "\nINFO: Current and next DB versions are same. Upgrade NOT required.\n"
 	 	     exit 0
-	      #elif [[ (( $current_engine_version > $next_engine_version )) ]]; then
          elif [[ $(version_to_number "$current_engine_version") -gt $(version_to_number "$next_engine_version") ]]; then
 		     echo -e "\nINFO: Current DB version is greater than next DB version. Upgrade NOT required.\n"
 		     exit 0
@@ -599,60 +740,95 @@ function update_extensions() {
 
    echo -e "\nINFO: Execute update_extensions function...\n"
 
-   # get DB creds from secret manager #
-   get_rds_creds
+    # Create log file path
+    local log_file="${LOGS_DIR}/${current_db_instance_id}/update_db_extensions_${DATE_TIME}.log"
 
-   # if no DB credentials found in secret manager, do not run analyze; throwing a warning"
-   #if [ "${db_user2}" = "" ]; then
-   if [[ "${db_user1}" = "" || "${db_user2}" = "" ]]; then
-   
-    # Connect to the PostgreSQL database
-    ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -p ${db_port} -d ${db_name}  -c '\q' >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to connect to the PostgreSQL database."
-        return 1
-    fi
+    # Ensure log directory exists
+    mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
 
-    # Update extensions using a PL/pgSQL anonymous code block
-    ${PSQL_BIN} -U ${db_user1} -h ${db_endpoint} -p ${db_port} -d ${db_name}  -c "
+    # Start logging
+    {
+        echo "================================================================"
+        echo "Execute update DB extensions Log - Started at $(date)"
+        echo "================================================================"
+        echo "Database Instance: ${current_db_instance_id}"
+        echo "Log File: ${log_file}"
+        echo "----------------------------------------------------------------"
 
-        SELECT now() BEFORE;
+        echo -e "\nINFO: Execute update_extensions function..."
+        echo -e "INFO: Started at $(date)"
 
-        DO \$\$
-        DECLARE
-            rec RECORD;
-            newest_version TEXT;
-            extensions_updated BOOLEAN := FALSE;
-        BEGIN
-            FOR rec IN
-                SELECT extname, (
-                    SELECT newest_version
-                    FROM pg_available_extension_versions
-                    WHERE name = extname
-                    ORDER BY newest_version DESC
-                    LIMIT 1
-                ) AS newest_version
-                FROM pg_extension
-            LOOP
-                IF rec.newest_version IS NOT NULL THEN
-                    EXECUTE 'ALTER EXTENSION ' || quote_ident(rec.extname) || ' UPDATE TO ' || quote_literal(rec.newest_version);
-                    RAISE NOTICE 'Updated extension % to version %', rec.extname, rec.newest_version;
-                    extensions_updated := TRUE;
+        # get DB creds from secret manager #
+        get_rds_creds
+
+        # Check if DB credentials exist
+        if [[ -z "${db_user1}" || -z "${db_user2}" ]]; then
+            echo "ERROR: Database credentials not found in secret manager"
+            return 1
+        fi
+
+        # Connect to the PostgreSQL database
+        echo "INFO: Testing database connection..."
+        if ! ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -p "${db_port}" -d "${db_name}" -c '\q' >/dev/null 2>&1; then
+            echo "ERROR: Failed to connect to the PostgreSQL database."
+            return 1
+        fi
+        echo "INFO: Database connection successful"
+
+        # Update extensions using a PL/pgSQL anonymous code block
+        echo -e "\nINFO: Starting extension updates..."
+        ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -p "${db_port}" -d "${db_name}" <<EOF
+            \timing on
+            
+            SELECT current_timestamp AS "Start Time";
+
+            DO \$\$
+            DECLARE
+                rec RECORD;
+                newest_version TEXT;
+                extensions_updated BOOLEAN := FALSE;
+            BEGIN
+                FOR rec IN
+                    SELECT extname, extversion, (
+                        SELECT version newest_version
+                        FROM pg_available_extension_versions
+                        WHERE name = extname
+                        ORDER BY newest_version DESC
+                        LIMIT 1
+                    ) AS newest_version
+                    FROM pg_extension
+                LOOP
+                    IF rec.newest_version IS NOT NULL THEN
+                        EXECUTE 'ALTER EXTENSION ' || quote_ident(rec.extname) || ' UPDATE TO ' || quote_literal(rec.newest_version);
+                        RAISE NOTICE 'Updated extension % to version %', rec.extname, rec.newest_version;
+                        extensions_updated := TRUE;
+                    END IF;
+                END LOOP;
+
+                IF NOT extensions_updated THEN
+                    RAISE NOTICE 'No extensions were updated.';
                 END IF;
-            END LOOP;
+            END\$\$;
 
-            IF NOT extensions_updated THEN
-                RAISE NOTICE 'No extensions were updated.';
-            END IF;
-        END\$\$;
+            SELECT current_timestamp AS "End Time";
+EOF
 
-        SELECT now() AFTER;
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to update extensions"
+            return 1
+        fi
 
-    "
+        echo -e "\nINFO: Extension update process completed at $(date)"
+        echo "INFO: Log file location: ${log_file}"
+        
+        echo "----------------------------------------------------------------"
+        echo "Operation completed at: $(date)"
+        echo "================================================================"
+        echo ""
+
+    } 2>&1 | tee "${log_file}"
+
     return 0
-
-   fi
-
 }
 ##-------------------------------------------------------------------------------------
 

@@ -3,12 +3,12 @@ Resources:
   RDSParameterGroup:
     Type: 'AWS::RDS::DBParameterGroup'
     Properties:
-      DBParameterGroupName: rds-psql-patch-instance-v14-param-group-3
+      DBParameterGroupName: rds-psql-patch-instance-v14-param-group-1
       Family: postgres14
-      Description: "rds postgresql instance v14 parameter group 3"
+      Description: "rds postgresql instance v14 parameter group 1"
       Tags:
         - Key: Name
-          Value: rds-psql-patch-instance-v14-param-group-3
+          Value: rds-psql-patch-instance-v14-param-group-1
         - Key: StackName
           Value: !Ref 'AWS::StackName'
 
@@ -16,7 +16,7 @@ Resources:
     Type: 'AWS::RDS::DBInstance'
     DependsOn: RDSParameterGroup
     Properties:
-      DBInstanceIdentifier: rds-psql-patch-instance-3
+      DBInstanceIdentifier: rds-psql-patch-instance-1
       DBInstanceClass: db.t3.micro
       Engine: postgres
       EngineVersion: '14.9'
@@ -32,6 +32,6 @@ Resources:
       DBName: rdspatch
       Tags:
         - Key: Name
-          Value: rds-psql-patch-instance-3
+          Value: rds-psql-patch-instance-1
         - Key: StackName
           Value: !Ref 'AWS::StackName'

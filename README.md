@@ -94,9 +94,11 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 
+     7. Log files:
+      
 ## AWS Systems Manager Automation
 
-1. Upload shell script to S3 bucket
+1. Upload unix shell script [rds_psql_patch.sh] to S3 bucket
 
 2. Create SSM IAM policy and role using CFN [create_ssm_rds_patch_iam_policy_role.yaml]
     * Modify resource names appropriately
@@ -104,8 +106,10 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 3. Create SSM automation document using CFN [create_ssm_rds_patch_automation_document.yaml]
     * Modify resource names appropriately
 
-4. Execute automation document "RDSPostgreSQLFleetUpgrade"
+4. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
     * Provide appropriate input parameters
+
+7. Log files
 
 ## Disclaimer
 

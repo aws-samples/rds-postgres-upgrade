@@ -66,7 +66,7 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
               * "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
                    ** Modify resource names appropriately
         - AWS Secrets Manager secret attached to each RDS instance
-        - S3 bucket for upgrade logs
+        - S3 bucket to store upgrade scripts and logs
         - SNS topic for notifications
       ```
 

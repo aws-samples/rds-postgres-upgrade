@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for RDS PostgreSQL Fleet Upgrade Automation Document'
+
+Resources:
+  RDSPostgreSQLFleetUpgrade:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Automation
+      Name: RDSPostgreSQLFleetUpgrade
+      Content:
+        schemaVersion: '0.3'
+        description: Upgrade fleet or RDS PostgreSQL instances
+        parameters:
+          AssumeRole:
+            type: String
+            description: The ARN of the role that allows Automation to perform the actions on your behalf.
+          TagKey:
+            type: String
+            description: The tag key to identify RDS PostgreSQL instances
+            default: UpgradeDB
+          TagValue:
+            type: String
+            description: The tag value to identify RDS PostgreSQL instances
+            default: 'Y'
+          TargetEngineVersion:
+            type: String
+            description: Target Engine Version (Sample value 15.8)
+          RunPreUpgradeTasks:
+            type: String
+            description: Whether to run pre-upgrade tasks (PREUPGRADE) or upgrade tasks (UPGRADE)
+            default: PREUPGRADE
+            allowedValues:
+              - PREUPGRADE
+              - UPGRADE
+          EC2InstanceId:
+            type: String
+            description: The ID of the existing EC2 Instance
+          S3ScriptKey:
+            type: String
+            description: The S3 key (path) to the shell script
+            default: rds_psql_patch.sh
+          ScriptsDir:
+            type: String
+            description: The directory where scripts will be stored
+            default: /tmp/rds_patch
+          S3BucketName:
+            type: String
+            description: The name of the S3 bucket containing the script and logs (optional)
+          SnsTopicArnEmail:
+            type: String
+            description: SNS Topic ARN for email notifications (optional)
+        assumeRole: '{{ AssumeRole }}'
+        mainSteps:
+          - name: DownloadAndSaveScript
+            action: aws:runCommand
+            nextStep: UpgradeInstances
+            isEnd: false
+            onFailure: Abort
+            inputs:
+              DocumentName: AWS-RunShellScript
+              InstanceIds:
+                - '{{ EC2InstanceId }}'
+              Parameters:
+                commands:
+                  - |
+                    aws s3 cp s3://{{ S3BucketName }}/{{ S3ScriptKey }} {{ ScriptsDir }}/rds_psql_patch.sh
+                    chmod +x {{ ScriptsDir }}/rds_psql_patch.sh
+          - name: UpgradeInstances
+            action: aws:runCommand
+            isEnd: true
+            onFailure: Abort
+            inputs:
+              DocumentName: AWS-RunShellScript
+              InstanceIds:
+                - '{{ EC2InstanceId }}'
+              Parameters:
+                commands:
+                  - |
+                    #!/bin/bash
+                    mkdir -p {{ ScriptsDir }}/logs
+                    log_message() {
+                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a {{ ScriptsDir }}/logs/upgrade_master.log
+                    }
+                    INSTANCES=$(aws rds describe-db-instances --filters "Name=engine,Values=postgres" --query 'DBInstances[?contains(TagList[].Key, `{{ TagKey }}`) && contains(TagList[].Value, `{{ TagValue }}`)].[DBInstanceIdentifier]' --output text)
+                    log_message "Found instances to upgrade: ${INSTANCES}"
+                    COUNT=0
+                    declare -a PIDS=()
+                    cleanup() {
+                      log_message "Cleaning up background processes..."
+                      for pid in "${PIDS[@]}"; do
+                        kill -9 $pid 2>/dev/null || true
+                      done
+                      exit 1
+                    }
+                    trap cleanup SIGINT SIGTERM
+                    export SCRIPTS_DIR={{ ScriptsDir }}
+                    export S3_BUCKET_PATCH_LOGS={{ S3BucketName }}
+                    export SNS_TOPIC_ARN_EMAIL={{ SnsTopicArnEmail }}
+                    for INSTANCE in $INSTANCES; do
+                      INSTANCE_LOG="{{ ScriptsDir }}/logs/${INSTANCE}_upgrade.log"
+                      (
+                        cd {{ ScriptsDir }}
+                        log_message "Starting upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
+                        if ./rds_psql_patch.sh "$INSTANCE" {{ TargetEngineVersion }} {{ RunPreUpgradeTasks }} >> "$INSTANCE_LOG" 2>&1; then
+                          log_message "Completed upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
+                        else
+                          log_message "Failed upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
+                          exit 1
+                        fi
+                      ) &
+                      PIDS+=($!)
+                      COUNT=$((COUNT+1))
+                      log_message "Started upgrade process for ${INSTANCE} with PID ${PIDS[-1]}"
+                    done
+                    EXIT_STATUS=0
+                    FAILED_INSTANCES=""
+                    for pid in "${PIDS[@]}"; do
+                      if ! wait $pid; then
+                        EXIT_STATUS=1
+                        FAILED_INSTANCES="${FAILED_INSTANCES} $(ps -p $pid -o args= 2>/dev/null | grep -o 'instance_[^ ]*' || echo 'unknown')"
+                      fi
+                    done
+                    log_message "Upgrade initiated for $COUNT instances"
+                    if [ $EXIT_STATUS -eq 0 ]; then
+                      log_message "All upgrades completed successfully"
+                    else
+                      log_message "Some upgrades failed. Failed instances:${FAILED_INSTANCES}"
+                    fi
+                    if [ -n "{{ S3BucketName }}" ]; then
+                      log_message "Uploading logs to S3..."
+                      aws s3 cp {{ ScriptsDir }}/logs s3://{{ S3BucketName }}/logs/$(date '+%Y-%m-%d')/ --recursive
+                    fi
+                    exit $EXIT_STATUS
+        outputs:
+          - UpgradeInstances.Output
+
+Outputs:
+  SSMDocumentName:
+    Description: Name of the SSM Automation Document
+    Value: !Ref RDSPostgreSQLFleetUpgrade

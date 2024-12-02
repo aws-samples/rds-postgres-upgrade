@@ -46,9 +46,7 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
    ```
    cd rds-postgres-upgrade
    ```
-3. Explore the scripts and documentation to set up the automation process.
-
-4. Prerequisites:
+3. Prerequisites:
    
      1. AWS Resources Required:
         - EC2 instance for running this script
@@ -80,7 +78,7 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
         - PostgreSQL client utilities
         - jq for JSON processing
 
-     4. Update environment variables "manual" section if/as needed (optional)
+     4. Update environment variables if needed (optional)
 
      5. Usage: 
          ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]

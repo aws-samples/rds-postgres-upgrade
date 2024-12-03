@@ -102,7 +102,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
      4. Required Tools:
         - AWS CLI
-        - PostgreSQL client utilities
+        - PostgreSQL client utility
         - jq for JSON processing
 
      5. Update environment variables if needed (optional)

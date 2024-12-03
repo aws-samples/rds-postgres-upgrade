@@ -71,7 +71,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
 1. Prerequisites:
    
    ```
-     1. AWS Resources Required:
+     1. AWS resources required:
    
         - EC2 instance primarily to store and run upgrade script, and store log files
    

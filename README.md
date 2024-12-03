@@ -8,6 +8,8 @@ Furthermore, you can integrate with AWS System Manager using RDS tag strategy to
 
 In this repository, we will guide you through setting up automation for pre-upgrade checks and upgrading one or more RDS instances.
 
+<br>
+
 ## Features
 
 - Automate PostgreSQL version upgrades on Amazon RDS (To upgrade RDS databases. RDS-PostgreSQL only)
@@ -15,6 +17,8 @@ In this repository, we will guide you through setting up automation for pre-upgr
 - Upgrade a single RDS instance
 - Scale the upgrade process to multiple RDS instances
 - Integrate with AWS System Manager for fleet-wide upgrades
+
+<br>
 
 ## Architecture Diagrams
 
@@ -46,6 +50,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
       8. Push log files to S3
       9. Send email notification
 
+<br>
 
 ## Flow Charts
 
@@ -53,10 +58,13 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ![rds-psql-upgrade-flow-chart.png](./rds-psql-upgrade-flow-chart.png)
 
+<br>
 
 **Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:**
 
 ![rds-psql-upgrade-flow-chart-fleet.png](./rds-psql-upgrade-flow-chart-fleet.png)
+
+<br>
 
 ## Setup - Upgrade single RDS PostgreSQL instance
 
@@ -69,40 +77,45 @@ In this repository, we will guide you through setting up automation for pre-upgr
    cd rds-postgres-upgrade
    ```
 3. Prerequisites:
-   
+   ```
      1. AWS Resources Required:
         - EC2 instance for running this script
         - IAM profile attached to EC2 instance with necessary permissions
-          ```
-              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create an IAM policy and role.
-                   ** Modify resource names appropriately
-              * Attach this IAM role to ec2 instance
-          ```
+                -- create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create an IAM policy and role.
+                         --- Modify resource names appropriately
+                -- Attach this IAM role to ec2 instance
+
         - RDS instance(s) with:
-          ```
-              * VPC configuration
-              * Subnet group(s)
-              * Security group(s)
-              * Parameter group
-              * Secrets Manager secret
-              * "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
-                   ** Modify resource names appropriately
+                -- VPC configuration
+                -- Subnet group(s)
+                -- Security group(s)
+                -- Parameter group
+                -- Secrets Manager secret
+                -- "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
+                      --- Modify resource names appropriately
         - AWS Secrets Manager secret attached to each RDS instance
         - S3 bucket to store upgrade scripts and logs
         - SNS topic for notifications
-      ```
 
-     2. Network Configuration:
+     3. Network Configuration:
         - Database security group must allow inbound traffic from EC2 instance
 
-     3. Required Tools:
+     4. Required Tools:
         - AWS CLI
         - PostgreSQL client utilities
         - jq for JSON processing
 
-     4. Update environment variables if needed (optional)
+     5. Update environment variables if needed (optional)
 
-     5. Usage: 
+     6. Identify minor and major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
+
+            aws rds describe-db-engine-versions \
+              --engine postgres \
+              --engine-version 14.9 \
+              --query "DBEngineVersions[].ValidUpgradeTarget[].{EngineVersion:EngineVersion,IsMajorVersionUpgrade:IsMajorVersionUpgrade}" \
+              --output table
+
+     7. Syntax: 
          ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
          ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 
@@ -112,10 +125,12 @@ In this repository, we will guide you through setting up automation for pre-upgr
          Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
                for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
 
-     6. Example Usage:
+     8. Example Usage:
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-      
+      ```
+<br>
+
 ## Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager
 
 1. Upload unix shell script [rds_psql_patch.sh] from git repo [ https://github.com/aws-samples/rds-postgres-upgrade] to S3 bucket
@@ -128,6 +143,8 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 4. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
     * Provide appropriate input parameters
+
+<br>
 
 ## Log Files
 
@@ -153,19 +170,27 @@ Below log files will be generated in the logs directory.
 | Analyze Task Log | Log of ANALYZE command execution | run_db_task_analyze-20230615-14-30-45.log |
 | Unfreeze Task Log | Log of VACUUM (unfreeze) command execution | run_db_task_unfreeze-20230615-14-30-45.log |
 
+<br>
+
 ## Disclaimer
 
 This script is provided as-is. Please review and test thoroughly before using in a production environment.
 
 This README provides an overview of your script, including its purpose, how to use it, prerequisites, and a brief description of its functions and environment variables. It also includes some usage examples and notes about the script's behavior. You can adjust or expand this README as needed to provide more detailed information about your script.
 
+<br>
+
 ## Contributing
 
 Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request.
 
+<br>
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+
+<br>
 
 ## License
 

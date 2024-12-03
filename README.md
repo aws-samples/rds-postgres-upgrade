@@ -74,7 +74,7 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
         - EC2 instance for running this script
         - IAM profile attached to EC2 instance with necessary permissions
           ```
-              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create a policy and role.
+              * create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create an IAM policy and role.
                    ** Modify resource names appropriately
               * Attach this IAM role to ec2 instance
           ```

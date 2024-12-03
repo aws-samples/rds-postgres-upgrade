@@ -41,7 +41,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
 ![rds-psql-patch-arch-ssm.png](./rds-psql-patch-arch-ssm.png)
 
       1. User connects to AWS Systems Manager console
-      2. Kick off the automation job "RDSPostgreSQLFleetUpgrade"
+      2. Run automation job "RDSPostgreSQLFleetUpgrade"
       3. Connects to S3 and downloads the shell script to ec2 instance
       4. Connecs to ec2 instance. Identifies list of RDS PostgreSQL instances based on tag key/value pair: UpgradeDB=Y
       5. For each RDS PostgreSQL Instance identified, configures RDS instance to push DB and upgrade logs to CloudWatch if not configured already, and

@@ -36,7 +36,7 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 
 ![rds-psql-upgrade-flow-chart-fleet.png](./rds-psql-upgrade-flow-chart-fleet.png)
 
-## Getting Started
+## Setup - Upgrade single RDS PostgreSQL instance
 
 1. Clone the repository:
    ```
@@ -94,9 +94,9 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
       
-## AWS Systems Manager Automation
+## Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager
 
-1. Upload unix shell script [rds_psql_patch.sh] to S3 bucket
+1. Upload unix shell script [rds_psql_patch.sh] from git repo [ https://github.com/aws-samples/rds-postgres-upgrade] to S3 bucket
 
 2. Create SSM IAM policy and role using CFN [create_ssm_rds_patch_iam_policy_role.yaml]
     * Modify resource names appropriately
@@ -108,6 +108,8 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
     * Provide appropriate input parameters
 
 ## Log Files
+
+Below log files will be generated in the logs directory.
 
 PREUPGRADE:
 
@@ -128,7 +130,6 @@ UPGRADE:
 | Extension Update Log | Log of PostgreSQL extension updates | update_db_extensions_20230615-14-30-45.log |
 | Analyze Task Log | Log of ANALYZE command execution | run_db_task_analyze-20230615-14-30-45.log |
 | Unfreeze Task Log | Log of VACUUM (unfreeze) command execution | run_db_task_unfreeze-20230615-14-30-45.log |
-
 
 ## Disclaimer
 

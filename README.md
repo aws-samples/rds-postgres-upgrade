@@ -12,7 +12,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ## Features
 
-- Automate PostgreSQL version upgrades on Amazon RDS (To upgrade RDS databases. RDS-PostgreSQL only)
+- Automate RDS PostgreSQL version upgrades on Amazon RDS
 - Perform prerequisite checks before upgrading
 - Upgrade a single RDS instance
 - Scale the upgrade process to multiple RDS instances

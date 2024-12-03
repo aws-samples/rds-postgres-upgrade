@@ -1,21 +1,21 @@
 # Automate PostgreSQL Version Upgrades on Amazon RDS
 
-Managing the lifecycle of your PostgreSQL database is essential for maintaining optimal performance, security, and feature access. Even with Amazon RDS for PostgreSQL simplifying operations, version upgrades remain a critical task for database administrators, especially in large-scale deployments. Manual upgrades can introduce challenges such as extended downtime and potential human errors, both of which can disrupt application stability.
+Managing the lifecycle of your PostgreSQL database is essential for maintaining optimal performance, security, and feature access. Even with Amazon RDS for PostgreSQL simplifying operations, version upgrades remain a critical task for database and devops engineers, especially in large-scale environments. Manual patching or upgrades can introduce challenges such as extended downtime and potential human errors, both of which can disrupt application stability.
 
 Automation can help address these challenges. By leveraging AWS Command Line Interface (CLI) commands within a Unix shell script, you can automate the upgrade process, including prerequisite checks and upgrading a single RDS instance. To scale this approach for multiple instances, a Unix wrapper script can loop through each RDS instance, executing the upgrade process simultaneously.
 
-Furthermore, you can integrate with AWS System Manager using RDS tag strategy to upgrade entire fleets of RDS instances across multiple environments — such as Development, Staging, and Production — in a consistent and automated manner.
+Furthermore, you can integrate with AWS System Manager using RDS tagging strategy to upgrade entire fleet of RDS instances across multiple environments — such as Development, Staging, and Production — in a consistent and automated manner.
 
-In this repository, we will guide you through setting up automation for pre-upgrade checks and upgrading one or more RDS instances.
+In this repository, we will guide you through setting up automation for pre-upgrade checks and upgrading one or more RDS PostgreSQL instances.
 
 <br>
 
 ## Features
 
-- Automate RDS PostgreSQL version upgrades on Amazon RDS
+- Automate Amazon RDS PostgreSQL version upgrades
 - Perform prerequisite checks before upgrading
 - Upgrade a single RDS instance
-- Scale the upgrade process to multiple RDS instances
+- Scale the upgrade process to multiple RDS PostgreSQL instances
 - Integrate with AWS System Manager for fleet-wide upgrades
 
 <br>
@@ -26,13 +26,13 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ![rds-psql-patch-arch.png](./rds-psql-patch-arch.png)
 
-      1. User connects to EC2 and executes the script
-      2. Check if RDS instance is valid
-      3. Configure RDS instance to push DB and upgrade logs to CloudWatch if not configured already
-      4. Retrieve secret from secret manager
-      5. Perform upgrade
-      6. Push log files to S3
-      7. Send email notification
+      1. User connects to EC2 and executes the upgrade script
+      2. Checks if RDS instance is valid
+      3. Configures RDS instance to push DB and upgrade logs to CloudWatch if not configured already
+      4. Retrieves secret from secret manager
+      5. Performs upgrade tasks
+      6. Pushes log files to S3
+      7. Sends email notification.
 
 <br>
 
@@ -41,14 +41,14 @@ In this repository, we will guide you through setting up automation for pre-upgr
 ![rds-psql-patch-arch-ssm.png](./rds-psql-patch-arch-ssm.png)
 
       1. User connects to AWS Systems Manager console
-      2. Run automation job "RDSPostgreSQLFleetUpgrade"
-      3. Connects to S3 and downloads the shell script to ec2 instance
-      4. Connecs to ec2 instance. Identifies list of RDS PostgreSQL instances based on tag key/value pair: *UpgradeDB=Y*
-      5. For each RDS PostgreSQL Instance identified, configures RDS instance to push DB and upgrade logs to CloudWatch if not configured already, and
-      6. Retrieve secret from secret manager
-      7. Perform upgrade
-      8. Push log files to S3
-      9. Send email notification
+      2. Execute automation job "RDSPostgreSQLFleetUpgrade"
+      3. Connects to S3 and downloads the upgrade shell script to ec2 instance
+      4. Connects to ec2 instance and identifies list of RDS PostgreSQL instances based on tag key/value pair: For e.g.: UpgradeDB = Y
+      5. For each RDS PostgreSQL Instance identified, configures RDS instance to push DB and upgrade logs to CloudWatch if not configured already
+      6. Retrieves secret from secret manager
+      7. Performs upgrade
+      8. Pushes log files to S3
+      9. Sends email notification.
 
 <br>
 
@@ -73,7 +73,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
    ```
      1. AWS Resources Required:
    
-        - EC2 instance for running this script
+        - EC2 instance primarily to store and run upgrade script, and store log files
    
         - IAM profile attached to EC2 instance with necessary permissions
    
@@ -89,12 +89,12 @@ In this repository, we will guide you through setting up automation for pre-upgr
                 -- Security group(s)
                 -- Parameter group
                 -- Secrets Manager secret
-                -- [create_rds_psql_instance_cfn.yaml] can be used (this creates DB Parameter group and RDS instance)
+                -- [create_rds_psql_instance_cfn.yaml] can be used to create DB Parameter group and RDS PostgreSQL instance
                       --- Modify resource names appropriately
    
         - AWS Secrets Manager secret attached to each RDS instance
    
-        - S3 bucket to store upgrade scripts and logs
+        - S3 bucket to store scripts and logs
    
         - SNS topic for notifications
 
@@ -121,7 +121,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
    
 5. Update environment variables in the shell script *[rds_psql_patch.sh]*, if required (optional)
 
-6. Identify minor or major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
+6. Identify minor or major upgrade path. Below is an example AWS CLI command to identify appropriate upgrade path for RDS PostgreSQL 14.9
  
       ```
             aws rds describe-db-engine-versions \
@@ -183,7 +183,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
     * Modify resource names appropriately
 
 4. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
-    * Provide appropriate input parameters (See below screenshot)
+    * Provide appropriate input parameters (see below screenshot)
             ![rds-patch-ssm-input-parameters.png](./rds-patch-ssm-input-parameters.png)
     * Identify major or minor version upgrade path as shown in the previous section
 

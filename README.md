@@ -4,7 +4,7 @@ Managing the lifecycle of your PostgreSQL database is essential for maintaining 
 
 Automation can help address these challenges. By leveraging AWS Command Line Interface (CLI) commands within a Unix shell script, you can automate the upgrade process, including prerequisite checks and upgrading a single RDS instance. To scale this approach for multiple instances, a Unix wrapper script can loop through each RDS instance, executing the upgrade process simultaneously.
 
-Furthermore, you can integrate with AWS System Manager using RDS tag strategy to upgrade entire fleets of RDS instances across multiple environments—such as Development, Staging, and Production— in a consistent and automated manner.
+Furthermore, you can integrate with AWS System Manager using RDS tag strategy to upgrade entire fleets of RDS instances across multiple environments — such as Development, Staging, and Production — in a consistent and automated manner.
 
 In this repository, we will guide you through setting up automation for pre-upgrade checks and upgrading one or more RDS instances.
 

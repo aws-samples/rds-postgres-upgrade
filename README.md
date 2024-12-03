@@ -74,6 +74,10 @@ In this repository, we will guide you through setting up automation for pre-upgr
      1. AWS Resources Required:
    
         - EC2 instance primarily to store and run upgrade script, and store log files
+              -- Required Tools:
+                     --- AWS CLI
+                     --- PostgreSQL client utility
+                     --- jq for JSON processing
    
         - IAM profile attached to EC2 instance with necessary permissions
    
@@ -88,12 +92,10 @@ In this repository, we will guide you through setting up automation for pre-upgr
                 -- Subnet group(s)
                 -- Security group(s)
                 -- Parameter group
-                -- Secrets Manager secret
+                -- AWS Secrets Manager secret attached to each RDS instance
                 -- [create_rds_psql_instance_cfn.yaml] can be used to create DB Parameter group and RDS PostgreSQL instance
                       --- Modify resource names appropriately
-   
-        - AWS Secrets Manager secret attached to each RDS instance
-   
+      
         - S3 bucket to store scripts and logs
    
         - SNS topic for notifications
@@ -101,12 +103,6 @@ In this repository, we will guide you through setting up automation for pre-upgr
      2. Network Configuration:
    
         - Database security group must allow inbound traffic from EC2 instance
-
-     3. Required Tools:
-   
-        - AWS CLI
-        - PostgreSQL client utility
-        - jq for JSON processing
       ```
    
 3. Clone the repository:

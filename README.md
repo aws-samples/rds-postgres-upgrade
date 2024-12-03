@@ -68,15 +68,8 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ## Setup - Upgrade single RDS PostgreSQL instance
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/aws-samples/rds-postgres-upgrade.git
-   ```
-2. Navigate to the project directory:
-   ```
-   cd rds-postgres-upgrade
-   ```
-3. Prerequisites:
+1. Prerequisites:
+   
    ```
      1. AWS Resources Required:
    
@@ -115,7 +108,17 @@ In this repository, we will guide you through setting up automation for pre-upgr
         - PostgreSQL client utility
         - jq for JSON processing
       ```
-
+   
+3. Clone the repository:
+   ```
+   git clone https://github.com/aws-samples/rds-postgres-upgrade.git
+   ```
+   
+4. Navigate to the project directory:
+   ```
+   cd rds-postgres-upgrade
+   ```
+   
 5. Update environment variables if needed (optional)
 
 6. Identify minor or major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
@@ -148,7 +151,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
             +----------------+-------------------------+
       ```
 
-8. Syntax:
+7. Syntax:
 
    ```
          ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
@@ -161,7 +164,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
                for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
    ```
       
-9. Example Usage:
+8. Example Usage:
 
    ```
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &

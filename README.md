@@ -74,7 +74,8 @@ In this repository, we will guide you through setting up automation for pre-upgr
      1. AWS Resources Required:
    
         - EC2 instance primarily to store and run upgrade script, and store log files
-              -- Required Tools:
+   
+               -- Required Tools:
                      --- AWS CLI
                      --- PostgreSQL client utility
                      --- jq for JSON processing

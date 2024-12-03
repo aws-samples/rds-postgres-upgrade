@@ -154,7 +154,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
 7. Syntax:
 
    ```
-         ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
+         ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [run-pre-check]
          ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 
          PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks

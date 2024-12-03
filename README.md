@@ -20,7 +20,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 <br>
 
-## Architecture Diagrams
+## Architecture
 
 **Upgrade single RDS PostgreSQL instance:**
 

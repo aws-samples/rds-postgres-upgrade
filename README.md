@@ -18,7 +18,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ## Architecture Diagrams
 
-Upgrade single RDS PostgreSQL instance:
+**Upgrade single RDS PostgreSQL instance:**
 
 ![rds-psql-patch-arch.png](./rds-psql-patch-arch.png)
 
@@ -32,7 +32,7 @@ Upgrade single RDS PostgreSQL instance:
 
 <br>
 
-Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
+**Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:**
 
 ![rds-psql-patch-arch-ssm.png](./rds-psql-patch-arch-ssm.png)
 
@@ -49,12 +49,12 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 
 ## Flow Charts
 
-Upgrade single RDS PostgreSQL instance:
+**Upgrade single RDS PostgreSQL instance:**
 
 ![rds-psql-upgrade-flow-chart.png](./rds-psql-upgrade-flow-chart.png)
 
 
-Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
+**Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:**
 
 ![rds-psql-upgrade-flow-chart-fleet.png](./rds-psql-upgrade-flow-chart-fleet.png)
 
@@ -133,7 +133,7 @@ Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 
 Below log files will be generated in the logs directory.
 
-PREUPGRADE:
+**PREUPGRADE**:
 
 | Log File Type | Purpose | Sample File Name |
 |---------------|---------|-------------------|
@@ -142,7 +142,7 @@ PREUPGRADE:
 
 <br>
 
-UPGRADE:
+**UPGRADE**:
 
 | Log File Type | Purpose | Sample File Name |
 |---------------|---------|-------------------|

@@ -199,7 +199,7 @@ Below log files will be generated in the logs directory for each option
 
 | Log File Type | Purpose | Sample File Name |
 |---------------|---------|-------------------|
-| Pre-upgrade Execution Log | Main execution log for pre-upgrade tasks | pre-upgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
+| Pre-upgrade Execution Log | Main execution log for pre-upgrade tasks | preupgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
 | Freeze Task Log | Log of VACUUM FREEZE command execution | run_db_task_freeze-20230615-14-30-45.log |
 
 <br>

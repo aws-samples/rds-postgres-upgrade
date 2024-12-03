@@ -248,6 +248,14 @@ Below log files will be generated in the logs directory for each option
 
 <br>
 
+## Conclusion
+
+The scalable solution automates RDS for PostgreSQL pre-upgrade and upgrade tasks, reducing manual effort and potential errors. With built-in logging and optional email notifications, it provides real-time visibility and comprehensive tracking. By optionally storing logs in S3, you benefit from a cost-effective solution that ensures logs are readily available for analysis, audits, and compliance purposes.
+
+We recommend validating the solution in a non-production environment before applying it to production to ensure a smooth upgrade.
+
+<br>
+
 ## Disclaimer
 
 This script is provided as-is. Please review and test thoroughly before using in a production environment.

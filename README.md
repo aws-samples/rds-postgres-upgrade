@@ -79,13 +79,18 @@ In this repository, we will guide you through setting up automation for pre-upgr
 3. Prerequisites:
    ```
      1. AWS Resources Required:
+   
         - EC2 instance for running this script
+   
         - IAM profile attached to EC2 instance with necessary permissions
+   
                 -- create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create an IAM policy and role.
                          --- Modify resource names appropriately
+   
                 -- Attach this IAM role to ec2 instance
 
         - RDS instance(s) with:
+   
                 -- VPC configuration
                 -- Subnet group(s)
                 -- Security group(s)
@@ -93,14 +98,19 @@ In this repository, we will guide you through setting up automation for pre-upgr
                 -- Secrets Manager secret
                 -- "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
                       --- Modify resource names appropriately
+   
         - AWS Secrets Manager secret attached to each RDS instance
+   
         - S3 bucket to store upgrade scripts and logs
+   
         - SNS topic for notifications
 
      2. Network Configuration:
+   
         - Database security group must allow inbound traffic from EC2 instance
 
      3. Required Tools:
+   
         - AWS CLI
         - PostgreSQL client utility
         - jq for JSON processing

@@ -188,12 +188,13 @@ In this repository, we will guide you through setting up automation for pre-upgr
             -- Input parameters in SSM console
             ![rds-patch-ssm-input-parameters.png](./rds-patch-ssm-input-parameters.png)
 
-            -- SSM automation job: status
-            ![rds-psql-upgrade-ssm-automation-job-status.png](./rds-psql-upgrade-ssm-automation-job-status.png)
+            -- SSM automation job: Status
+      ![rds-psql-upgrade-ssm-automation-job-status.png](./rds-psql-upgrade-ssm-automation-job-status.png)
+            
 
             -- SSM automation steps (1 and 2): Status
-            ![rds-psql-upgrade-ssm-automation-job-step-1-status.png](./rds-psql-upgrade-ssm-automation-job-step-1-status.png)
-            ![rds-psql-upgrade-ssm-automation-job-step-1-status.png](./rds-psql-upgrade-ssm-automation-job-step-1-status.png)
+      ![rds-psql-upgrade-ssm-automation-job-step-1-status.png](./rds-psql-upgrade-ssm-automation-job-step-1-status.png)
+      ![rds-psql-upgrade-ssm-automation-job-step-1-status.png](./rds-psql-upgrade-ssm-automation-job-step-1-status.png)
 
 <br>
 

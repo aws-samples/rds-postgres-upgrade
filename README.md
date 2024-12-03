@@ -22,15 +22,37 @@ Upgrade single RDS PostgreSQL instance:
 
 ![rds-psql-patch-arch.png](./rds-psql-patch-arch.png)
 
+      1. User connects to EC2 and executes the script
+      2. Check if RDS instance is valid
+      3. Configure RDS instance to push DB and upgrade logs to CloudWatch if not configured already
+      4. Retrieve secret from secret manager
+      5. Perform upgrade
+      6. Push log files to S3
+      7. Send email notification
+
+<br>
+
 Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 
 ![rds-psql-patch-arch-ssm.png](./rds-psql-patch-arch-ssm.png)
+
+      1. User connects to AWS Systems Manager console
+      2. Kick off the automation job "RDSPostgreSQLFleetUpgrade"
+      3. Connects to S3 and downloads the shell script to ec2 instance
+      4. Connecs to ec2 instance. Identifies list of RDS PostgreSQL instances based on tag key/value pair: DBUpgrade=Y
+      5. For each RDS PostgreSQL Instance identified, configures RDS instance to push DB and upgrade logs to CloudWatch if not configured already, and
+      6. Retrieve secret from secret manager
+      7. Perform upgrade
+      8. Push log files to S3
+      9. Send email notification
+
 
 ## Flow Charts
 
 Upgrade single RDS PostgreSQL instance:
 
 ![rds-psql-upgrade-flow-chart.png](./rds-psql-upgrade-flow-chart.png)
+
 
 Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager:
 

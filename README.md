@@ -169,7 +169,9 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ## Log Files
 
-Below log files will be generated in the logs directory.
+Below log files will be generated in the logs directory for each option
+
+<br>
 
 **PREUPGRADE**:
 

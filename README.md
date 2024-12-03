@@ -43,7 +43,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
       1. User connects to AWS Systems Manager console
       2. Run automation job "RDSPostgreSQLFleetUpgrade"
       3. Connects to S3 and downloads the shell script to ec2 instance
-      4. Connecs to ec2 instance. Identifies list of RDS PostgreSQL instances based on tag key/value pair: UpgradeDB=Y
+      4. Connecs to ec2 instance. Identifies list of RDS PostgreSQL instances based on tag key/value pair: *UpgradeDB=Y*
       5. For each RDS PostgreSQL Instance identified, configures RDS instance to push DB and upgrade logs to CloudWatch if not configured already, and
       6. Retrieve secret from secret manager
       7. Perform upgrade
@@ -77,7 +77,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
    
         - IAM profile attached to EC2 instance with necessary permissions
    
-                -- create_rds_psql_patch_iam_policy_role_cfn.yaml can be used to create an IAM policy and role.
+                -- [create_rds_psql_patch_iam_policy_role_cfn.yaml] can be used to create an IAM policy and role.
                          --- Modify resource names appropriately
    
                 -- Attach this IAM role to ec2 instance
@@ -89,7 +89,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
                 -- Security group(s)
                 -- Parameter group
                 -- Secrets Manager secret
-                -- "create_rds_psql_instance_cfn.yaml" can be used (this creates DB Parameter group and RDS instance)
+                -- [create_rds_psql_instance_cfn.yaml] can be used (this creates DB Parameter group and RDS instance)
                       --- Modify resource names appropriately
    
         - AWS Secrets Manager secret attached to each RDS instance
@@ -119,7 +119,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
    cd rds-postgres-upgrade
    ```
    
-5. Update environment variables in the shell script [rds_psql_patch], if required (optional)
+5. Update environment variables in the shell script *[rds_psql_patch.sh]*, if required (optional)
 
 6. Identify minor or major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
  
@@ -174,12 +174,12 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ## Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager
 
-1. Upload unix shell script [rds_psql_patch.sh] from this repo to S3 bucket
+1. Upload unix shell script *[rds_psql_patch.sh]* from this repo to S3 bucket
 
-2. Create SSM IAM policy and role using CFN [create_ssm_rds_patch_iam_policy_role.yaml]
+2. Create SSM IAM policy and role using CFN *[create_ssm_rds_patch_iam_policy_role.yaml]*
     * Modify resource names appropriately
 
-3. Create SSM automation document using CFN [create_ssm_rds_patch_automation_document.yaml]
+3. Create SSM automation document using CFN *[create_ssm_rds_patch_automation_document.yaml]*
     * Modify resource names appropriately
 
 4. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"

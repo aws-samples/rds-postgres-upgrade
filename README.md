@@ -97,17 +97,17 @@ In this repository, we will guide you through setting up automation for pre-upgr
         - S3 bucket to store upgrade scripts and logs
         - SNS topic for notifications
 
-     3. Network Configuration:
+     2. Network Configuration:
         - Database security group must allow inbound traffic from EC2 instance
 
-     4. Required Tools:
+     3. Required Tools:
         - AWS CLI
         - PostgreSQL client utility
         - jq for JSON processing
 
-     5. Update environment variables if needed (optional)
+     4. Update environment variables if needed (optional)
 
-     6. Identify minor or major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
+     5. Identify minor or major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
 
             aws rds describe-db-engine-versions \
               --engine postgres \
@@ -135,7 +135,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
             |  15.10         |  True                   |
             +----------------+-------------------------+
 
-     7. Syntax: 
+     6. Syntax: 
          ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
          ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 
@@ -145,7 +145,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
          Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
                for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
 
-     8. Example Usage:
+     7. Example Usage:
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
       ```

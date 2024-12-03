@@ -56,23 +56,22 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 **PREUPGRADE Tasks:**
 
-      1. Creates new parameter group compatible with target version
-      2. Takes a database snapshot if db_snapshot_required="Y"
-      3. Runs VACUUM FREEZE.
+      1. Create new parameter group
+      2. Take database snapshot
+      3. VACUUM FREEZE.
 
 <br>
 
 **UPGRADE Tasks:**
 
-      1. Creates new parameter group compatible with target version
-      2. Takes a database snapshot if db_snapshot_required="Y"
-      3. Drop replication slots(s) if exists
-      4. Takes a database snapshot
-      5. Performs OS maintenance if available
-      6. Performs database version upgrade
-      7. Updates PostgreSQL extensions as appropriate
-      8. Runs ANALYZE
-      9. Run UNFREEZE.
+      1. Create new parameter group
+      2. Take database snapshot
+      3. Drop replication slot(s)
+      4. OS maintenance
+      5. Database version upgrade
+      6. PostgreSQL extensions update
+      7. Analyze
+      8. VACUUM (unfreeze).
 
 <br>
 

@@ -52,6 +52,30 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 <br>
 
+## High-level Tasks with PREUPGRADE and UPGRADE options
+
+**PREUPGRADE Tasks:**
+
+      1. Creates new parameter group compatible with target version
+      2. Takes a database snapshot if db_snapshot_required="Y"
+      3. Runs VACUUM FREEZE.
+
+<br>
+
+**UPGRADE Tasks:**
+
+      1. Creates new parameter group compatible with target version
+      2. Takes a database snapshot if db_snapshot_required="Y"
+      3. Drop replication slots(s) if exists
+      4. Takes a database snapshot
+      5. Performs OS maintenance if available
+      6. Performs database version upgrade
+      7. Updates PostgreSQL extensions as appropriate
+      8. Runs ANALYZE
+      9. Run UNFREEZE.
+
+<br>
+
 ## Flow Charts
 
 **Upgrade single RDS PostgreSQL instance:**

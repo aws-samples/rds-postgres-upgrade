@@ -183,9 +183,17 @@ In this repository, we will guide you through setting up automation for pre-upgr
     * Modify resource names appropriately
 
 4. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
-    * Provide appropriate input parameters (see below screenshot)
-            ![rds-patch-ssm-input-parameters.png](./rds-patch-ssm-input-parameters.png)
     * Identify major or minor version upgrade path as shown in the previous section
+    * Provide appropriate input parameters. See below screenshots.
+            -- Input parameters in SSM console
+            ![rds-patch-ssm-input-parameters.png](./rds-patch-ssm-input-parameters.png)
+
+            -- SSM automation job: status
+            ![rds-psql-upgrade-ssm-automation-job-status.png](./rds-psql-upgrade-ssm-automation-job-status.png)
+
+            -- SSM automation steps (1 and 2): Status
+            ![rds-psql-upgrade-ssm-automation-job-step-1-status.png](./rds-psql-upgrade-ssm-automation-job-step-1-status.png)
+            ![rds-psql-upgrade-ssm-automation-job-step-1-status.png](./rds-psql-upgrade-ssm-automation-job-step-1-status.png)
 
 <br>
 

@@ -119,7 +119,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
    cd rds-postgres-upgrade
    ```
    
-5. Update environment variables if needed (optional)
+5. Update environment variables in the shell script [rds_psql_patch], if required (optional)
 
 6. Identify minor or major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
  

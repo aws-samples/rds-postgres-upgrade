@@ -104,11 +104,13 @@ In this repository, we will guide you through setting up automation for pre-upgr
         - AWS CLI
         - PostgreSQL client utility
         - jq for JSON processing
+      ```
 
-     4. Update environment variables if needed (optional)
+5. Update environment variables if needed (optional)
 
-     5. Identify minor or major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
-
+6. Identify minor or major upgrade path. Below is an example AWS CLI command for RDS PostgreSQL 14.9.
+ 
+      ```
             aws rds describe-db-engine-versions \
               --engine postgres \
               --engine-version 14.9 \
@@ -134,8 +136,11 @@ In this repository, we will guide you through setting up automation for pre-upgr
             |  15.9          |  True                   |
             |  15.10         |  True                   |
             +----------------+-------------------------+
+      ```
 
-     6. Syntax: 
+8. Syntax:
+
+   ```
          ./rds_psql_patch.sh [db-instance-id] [next-enginer-version] [run-pre-check]
          ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 
@@ -144,11 +149,14 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
          Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
                for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
+   ```
+      
+9. Example Usage:
 
-     7. Example Usage:
+   ```
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-      ```
+   ```
 <br>
 
 ## Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager

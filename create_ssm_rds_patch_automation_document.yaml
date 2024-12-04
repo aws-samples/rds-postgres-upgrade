@@ -15,34 +15,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
-      Policies:
-        - PolicyName: RDSUpgradeAutomationPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              # - Effect: Allow
-              #   Action:
-              #     - rds:DescribeDBInstances
-              #     - rds:ModifyDBInstance
-              #     - rds:RebootDBInstance
-              #     - rds:AddTagsToResource
-              #     - rds:ListTagsForResource
-              #   Resource: '*'
-              - Effect: Allow
-                Action:
-                  - ssm:SendCommand
-                  - ssm:GetCommandInvocation
-                Resource: '*'
-              # - Effect: Allow
-              #   Action:
-              #     - sns:Publish
-              #   Resource: !Ref SnsTopicArnEmail
-              # - Effect: Allow
-              #   Action:
-              #     - s3:GetObject
-              #     - s3:PutObject
-              #   Resource: 
-              #     - !Sub arn:aws:s3:::${S3BucketName}/*
 
   RDSPostgreSQLFleetUpgrade:
     Type: AWS::SSM::Document

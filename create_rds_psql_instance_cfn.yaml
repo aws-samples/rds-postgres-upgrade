@@ -1,5 +1,227 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Description: Create test RDS PostgreSQL Instance
+
+Parameters:
+  SecurityGroupId:
+    Type: String
+    Description: The Security Group to assign to the DB instance
+  SubnetIdAZ1:
+    Type: String
+    Description: The Subnet to assign to the DB instance in AZ 1
+  SubnetIdAZ2:
+    Type: String
+    Description: The Subnet to assign to the DB instance in AZ 2
+  BucketNamePrefix:
+    Type: String
+    Default: 'rds-upgrade-scripts'
+
+  # Parameter to retrieve the latest Amazon Linux AMI from current region
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+
 Resources:
+
+# S3 bucket accessible by EC2 instance for hosting upgrade scripts to be executed on EC2 instance
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${BucketNamePrefix}-${AWS::Region}-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+# S3 bucket policy to restrict access to EC2 instance
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowEC2RoleAccess
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt InstanceRole.Arn
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:DeleteObject
+              - s3:GetObjectVersion
+              - s3:PutObjectAcl
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+          - Sid: DenyUnencryptedTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+# Create EC2 instance that includes PostgreSQL client, aws-cli, and JQ installed on an Amazon Linux machine with network access to RDS DB instance
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: RDSUpgradeInstancePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:DescribeDBEngineVersions
+                  - rds:DescribeOrderableDBInstanceOptions
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - rds:DescribeDBInstances
+                  - rds:ModifyDBInstance
+                  - rds:RebootDBInstance
+                  - rds:CreateDBSnapshot
+                  - rds:DescribeDBSnapshots
+                  - rds:DeleteDBSnapshot
+                  - rds:DescribeOrderableDBInstanceOptions
+                  - rds:DescribeDBParameterGroups
+                  - rds:CreateDBParameterGroup
+                  - rds:ModifyDBParameterGroup
+                  - rds:DescribeDBParameters
+                  - rds:DescribePendingMaintenanceActions
+                  - rds:ApplyPendingMaintenanceAction
+                  - rds:AddTagsToResource
+                  - rds:ListTagsForResource
+                Resource: 
+                  - arn:aws:rds:*:*:db:*
+                  - arn:aws:rds:*:*:pg:*
+                  - arn:aws:rds:*:*:snapshot:*
+              # - Effect: Allow
+              #   Action:
+              #     - iam:CreateRole
+              #     - iam:DeleteRole
+              #     - iam:GetRole
+              #     - iam:PutRolePolicy
+              #     - iam:DeleteRolePolicy
+              #     - iam:ListRolePolicies
+              #     - iam:ListAttachedRolePolicies
+              #     - iam:CreatePolicy
+              #     - iam:DeletePolicy
+              #     - iam:GetPolicy
+              #     - iam:ListPolicyVersions
+              #     - iam:AttachRolePolicy
+              #     - iam:DetachRolePolicy
+              #     - iam:TagRole
+              #     - iam:UntagRole
+              #     - iam:UpdateRole
+              #     - iam:UpdateRoleDescription
+              #   Resource:
+              #     - arn:aws:iam::*:role/rds-psql-patch-*
+              #     - arn:aws:iam::*:policy/rds-psql-patch-*
+              # - Effect: Allow
+              #   Action:
+              #     - iam:GetRole
+              #     - iam:ListRoles
+              #   Resource: arn:aws:iam::*:role/rds-psql-patch-*
+              # - Effect: Allow
+              #   Action:
+              #     - cloudwatch:PutMetricData
+              #     - cloudwatch:GetMetricStatistics
+              #     - cloudwatch:ListMetrics
+              #   Resource: arn:aws:cloudwatch:*:*:metric-stream/rds-psql-patch-*
+              # - Effect: Allow
+              #   Action:
+              #     - logs:CreateLogGroup
+              #     - logs:CreateLogStream
+              #     - logs:PutLogEvents
+              #     - logs:DescribeLogStreams
+              #     - logs:GetLogEvents
+              #   Resource:
+              #     - arn:aws:logs:*:*:log-group:rds-psql-patch-*
+              #     - arn:aws:logs:*:*:log-group:rds-psql-patch-*:log-stream:*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3Bucket}"
+                  - !Sub "arn:aws:s3:::${S3Bucket}/*"
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: arn:aws:secretsmanager:*:*:secret:rds*
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: "arn:aws:sns:*:*:rds-psql-patch-*"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                  - kms:CreateGrant
+                  - kms:ReEncrypt*
+                  - kms:DescribeKey
+                Resource:
+                  - arn:aws:kms:*:*:key/rds-psql-patch-*
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - !Ref InstanceRole
+      InstanceProfileName: InstanceRole
+  
+  ToolsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      EbsOptimized: true
+      Monitoring: true
+      IamInstanceProfile: !Ref InstanceProfile
+      ImageId: !Ref LatestAmiId
+      InstanceType: t3.micro
+      SecurityGroupIds:
+      - !Ref SecurityGroupId
+      SubnetId: !Ref SubnetIdAZ1
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y postgresql15 jq awscli
+          # TOKEN=$(aws secretsmanager get-secret-value --secret-id "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" --region ${AWS::Region} | jq --raw-output '.SecretString')
+          # echo $TOKEN > /home/ec2-user/.postgresql.pass
+          # chmod 600 /home/ec2-user/.postgresql.pass
+
+  RDSSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: 'RDS VPC Subnet Group'
+      SubnetIds:
+        - !Ref SubnetIdAZ1
+        - !Ref SubnetIdAZ2
+
   RDSParameterGroup:
     Type: 'AWS::RDS::DBParameterGroup'
     Properties:
@@ -17,7 +239,6 @@ Resources:
 
   RDSInstance:
     Type: 'AWS::RDS::DBInstance'
-    DependsOn: RDSParameterGroup
     Properties:
       DBInstanceIdentifier: rds-psql-patch-instance-1
       DBInstanceClass: db.t3.micro
@@ -30,8 +251,8 @@ Resources:
       BackupRetentionPeriod: 7
       MultiAZ: true
       VPCSecurityGroups: 
-        - sg-04d00ee62424bdb65
-      DBSubnetGroupName: rds-psql-patch-test-db-subnet-group
+        - !Ref SecurityGroupId
+      DBSubnetGroupName: !Ref RDSSubnetGroup
       DBName: rdspatch
       StorageEncrypted: true
       Tags:

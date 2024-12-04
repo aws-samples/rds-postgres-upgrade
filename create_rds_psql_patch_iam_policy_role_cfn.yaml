@@ -25,7 +25,6 @@ Resources:
               - rds:RebootDBInstance
               - rds:CreateDBSnapshot
               - rds:DescribeDBSnapshots
-              - rds:DeleteDBSnapshot
               - rds:DescribeOrderableDBInstanceOptions
               - rds:DescribeDBParameterGroups
               - rds:CreateDBParameterGroup

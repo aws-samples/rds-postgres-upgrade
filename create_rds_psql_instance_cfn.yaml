@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Create test RDS PostgreSQL Instance
+Description: Create test RDS PostgreSQL Instance, S3 bucket, EC2 instances and necessary IAM entities for RDS upgrade testing
 
 Parameters:
   SecurityGroupId:
@@ -21,6 +21,12 @@ Parameters:
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
 
 Resources:
+
+# SNS Topic to send upgrade notifications to
+  RdsUpgradeTestSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: 'RdsUpgradeTestSnsTopic'
 
 # S3 bucket accessible by EC2 instance for hosting upgrade scripts to be executed on EC2 instance
   S3Bucket:
@@ -72,7 +78,6 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
-# Create EC2 instance that includes PostgreSQL client, aws-cli, and JQ installed on an Amazon Linux machine with network access to RDS DB instance
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -129,20 +134,11 @@ Resources:
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
-                Resource: arn:aws:secretsmanager:*:*:secret:rds*
+                Resource: !GetAtt RDSInstance.MasterUserSecret.SecretArn
               - Effect: Allow
                 Action:
                   - sns:Publish
-                Resource: "arn:aws:sns:*:*:rds-psql-patch-*"
-              - Effect: Allow
-                Action:
-                  - kms:Decrypt
-                  - kms:GenerateDataKey
-                  - kms:CreateGrant
-                  - kms:ReEncrypt*
-                  - kms:DescribeKey
-                Resource:
-                  - arn:aws:kms:*:*:key/rds-psql-patch-*
+                Resource: !Ref RdsUpgradeTestSnsTopic
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -151,6 +147,7 @@ Resources:
       - !Ref InstanceRole
       InstanceProfileName: InstanceRole
   
+# Create EC2 instance that includes PostgreSQL client, aws-cli, and JQ installed on an Amazon Linux machine with network access to RDS DB instance
   ToolsInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -217,3 +214,20 @@ Resources:
           Value: rds-psql-patch-instance-1
         - Key: StackName
           Value: !Ref 'AWS::StackName'
+
+Outputs:
+  S3BucketName:
+    Description: Name of the S3 bucket created for upgrade scripts
+    Value: !Ref S3Bucket
+
+  SnsTopicArn:
+    Description: ARN of the SNS topic created for upgrade notifications
+    Value: !Ref RdsUpgradeTestSnsTopic
+
+  EC2InstanceId:
+    Description: ID of the EC2 tools instance
+    Value: !Ref ToolsInstance
+
+  RDSInstanceIdentifier:
+    Description: Identifier of the RDS instance
+    Value: !Ref RDSInstance

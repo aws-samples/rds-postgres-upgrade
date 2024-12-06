@@ -10,7 +10,6 @@ Resources:
   SSMAutomationRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: RDSPSQLPatchRole-SSM
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -51,6 +50,23 @@ Resources:
                   - ssm:ListCommandInvocations
                   - ssm:GetCommandInvocation
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/RDSPostgreSQLFleetUpgrade'
+  SSMAutomationRolePassRolePolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName: !GetAtt SSMAutomationRole.RoleName
+      PolicyName: SSMAutomationRolePassRolePolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource:
+              !Join
+              - ''
+              - - !Sub 'arn:aws:iam::${AWS::AccountId}:role/'
+                - !GetAtt SSMAutomationRole.RoleName
+
 
 Outputs:
   SSMAutomationRoleARN:

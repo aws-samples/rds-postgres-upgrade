@@ -1,4 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  RDSMasterUsername:
+    Type: String
+    Description: RDS Master Username
+  RDSSecurityGroups:
+    Type: List<String>
+    Description: Security groups to use
 Resources:
   RDSParameterGroup:
     Type: 'AWS::RDS::DBParameterGroup'
@@ -19,18 +26,20 @@ Resources:
     Type: 'AWS::RDS::DBInstance'
     DependsOn: RDSParameterGroup
     Properties:
-      DBInstanceIdentifier: rds-psql-patch-instance-1
+      DeletionProtection: true
+      PubliclyAccessible: false
       DBInstanceClass: db.t3.micro
       Engine: postgres
       EngineVersion: '14.9'
-      MasterUsername: postgres
+      MasterUsername:
+        - !Ref RDSMasterUsername
+        - NoEcho: true
       ManageMasterUserPassword: true
       DBParameterGroupName: !Ref RDSParameterGroup
       AllocatedStorage: 200
       BackupRetentionPeriod: 7
       MultiAZ: true
-      VPCSecurityGroups: 
-        - sg-04d00ee62424bdb65
+      VPCSecurityGroups: !Ref RDSSecurityGroups
       DBSubnetGroupName: rds-psql-patch-test-db-subnet-group
       DBName: rdspatch
       StorageEncrypted: true

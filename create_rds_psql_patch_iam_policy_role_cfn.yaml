@@ -9,7 +9,6 @@ Resources:
   RDSPSQLPatchPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: RDSPSQLPatchPolicy
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -94,7 +93,6 @@ Resources:
   RDSPSQLPatchRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: RDSPSQLPatchRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

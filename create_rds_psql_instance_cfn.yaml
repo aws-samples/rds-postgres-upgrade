@@ -349,6 +349,7 @@ Resources:
       DBSubnetGroupName: !Ref RDSSubnetGroup
       DBName: rdspatch
       StorageEncrypted: true
+      AutoMinorVersionUpgrade: false
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-RDSInstance

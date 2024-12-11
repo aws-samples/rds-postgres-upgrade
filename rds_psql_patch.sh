@@ -76,13 +76,13 @@ LOGS_DIR="./logs"
 ##-------------------------------------------------------------------------------------
 
 # Environment Variables - Software binaries - Manual #
-AWS_CLI=`which aws`
-PSQL_BIN=`which psql`
+AWS_CLI=$(which aws)
+PSQL_BIN=$(which psql)
 
 # Environment Variables - Misc. - Manual #
 db_snapshot_required="Y"  # set this to Y if manual snapshot is required #
 db_parameter_modify="N"  # set this to Y if security and replication related parameters needs to be enabled; if not set it to N. Used in create_param_group function #
-DATE_TIME=`date +'%Y%m%d-%H-%M-%S'`
+DATE_TIME=$(date +'%Y%m%d-%H-%M-%S')
 
 ##-------------------------------------------------------------------------------------
 
@@ -119,7 +119,7 @@ else
    EMAIL_SUBJECT="RDS PostgreSQL DB Upgrade"
 fi
 
-echo -e "\nBEGIN -  ${EMAIL_SUBJECT} - `date`"
+echo -e "\nBEGIN -  ${EMAIL_SUBJECT} - $(date)"
 
 ##-------------------------------------------------------------------------------------
 # functions #
@@ -144,7 +144,7 @@ function wait_till_available() {
 
       current_db_status=$( ${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --query 'DBInstances[0].[DBInstanceStatus]' --output text )
       #echo ".%s"
-      echo "INFO: Wait-DBUpgrade Status = ${current_db_status} - `date`"
+      echo "INFO: Wait-DBUpgrade Status = ${current_db_status} - $(date)"
       sleep 60s
 
     done
@@ -638,7 +638,7 @@ function db_snapshot() {
         db_snapshot_name=$( echo "${db_snapshot_name//./-}" )
 
         echo ""
-        echo "INFO: DBSnapshot [ ${db_snapshot_name} ] - `date`"
+        echo "INFO: DBSnapshot [ ${db_snapshot_name} ] - $(date)"
 
         ${AWS_CLI} rds create-db-snapshot \
             --db-instance-identifier ${current_db_instance_id} \
@@ -657,7 +657,7 @@ function db_snapshot() {
     else
 
       echo ""
-      echo "INFO: Manual DBSnapshot NOT required for Major version upgrade - `date`"
+      echo "INFO: Manual DBSnapshot NOT required for Major version upgrade - $(date)"
 
     fi
 
@@ -862,7 +862,7 @@ function get_db_info() {
      current_engine_type=$(echo $instance_info | jq -r '.DBInstances[0].Engine')
      current_engine_version=$(echo $instance_info | jq -r '.DBInstances[0].EngineVersion')
      current_engine_version_family=$(echo $instance_info | jq -r '.DBInstances[0].EngineVersion | split(".")[0:2] | join(".")')
-     current_engine_version_family=`echo "${current_engine_version_family}" | cut -d. -f1`
+     current_engine_version_family=$(echo "${current_engine_version_family}" | cut -d. -f1)
      current_db_param_group=$(echo $instance_info | jq -r '.DBInstances[0].DBParameterGroups[0].DBParameterGroupName')
      current_db_secret_arn=$(echo $instance_info | jq -r '.DBInstances[0].MasterUserSecret.SecretArn')
 
@@ -1002,5 +1002,5 @@ copy_logs_to_s3
 # send email notification #
 send_email
 echo ""
-echo -e "END -  ${EMAIL_SUBJECT} - `date`\n"
+echo -e "END -  ${EMAIL_SUBJECT} - $(date)\n"
 exit 0

@@ -94,40 +94,39 @@ In this repository, we will guide you through setting up automation for pre-upgr
 1. Prerequisites:
    
    ```
-     1. AWS resources required:
+     a. AWS resources required:
    
-        - EC2 instance primarily to store and run upgrade script, and store log files
+        i. EC2 instance primarily to store and run upgrade script, and store log files
    
-               -- Required Tools:
-                     --- AWS CLI
-                     --- PostgreSQL client utility
-                     --- jq for JSON processing
+               - Required Tools:
+                     -- AWS CLI
+                     -- PostgreSQL client utility
+                     -- jq for JSON processing
    
-        - IAM profile attached to EC2 instance with necessary permissions
+        ii. IAM profile attached to EC2 instance with necessary permissions
    
-                -- [create_rds_psql_patch_iam_policy_role_cfn.yaml] can be used to create an IAM policy and role.
-                         --- Modify resource names appropriately
+                - [create_rds_psql_patch_iam_policy_role_cfn.yaml] can be used to create an IAM policy and role.
+                         -- Modify resource names appropriately
    
-                -- Attach this IAM role to ec2 instance
+                - Attach this IAM role to ec2 instance
 
-        - RDS instance(s) with:
+        iii. RDS instance(s) with:
    
-                -- VPC configuration
-                -- Subnet group(s)
-                -- Security group(s)
-                -- Parameter group
-                -- AWS Secrets Manager secret attached to each RDS instance
-                -- [create_rds_psql_instance_cfn.yaml] can be used to create DB Parameter group and RDS PostgreSQL instance
-                      --- Modify resource names appropriately
+                - VPC configuration
+                - Subnet group(s)
+                - Security group(s)
+                - Parameter group
+                - AWS Secrets Manager secret attached to each RDS instance
+                - [create_rds_psql_instance_cfn.yaml] can be used to create DB Parameter group and RDS PostgreSQL instance
+                      -- Modify resource names appropriately
       
-        - S3 bucket to store scripts and logs
+        vi. S3 bucket to store scripts and logs (optional)
    
-        - SNS topic for notifications
+        v. SNS topic for notifications (optional)
 
-     2. Network Configuration:
+     b. Network Configuration:
    
         - Database security group must allow inbound traffic from EC2 instance
-      ```
    
 3. Clone the repository:
    ```
@@ -171,7 +170,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
             +----------------+-------------------------+
       ```
 
-7. Execution
+7. Execute upgrade process
 
       a. Set up log file location in the environment (optional).
          If this variable is not set, log files will not be copied over to S3 bucket.
@@ -200,12 +199,18 @@ In this repository, we will guide you through setting up automation for pre-upgr
                      for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
       
 9. Example Usage:
-
+   
            a. Preupgrade process exeuction:
-           nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+
+               export S3_BUCKET_PATCH_LOGS="s3-rds-psql-patch-test-bucket"
+               export SNS_TOPIC_ARN_EMAIL="arn:aws:sns:us-east-1:11111111111:sns-rds-psql-patch-test-sns-topic"
+               nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 
            b. Upgrade process exeuction
-           nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
+
+               export S3_BUCKET_PATCH_LOGS="s3-rds-psql-patch-test-bucket"
+               export SNS_TOPIC_ARN_EMAIL="arn:aws:sns:us-east-1:11111111111:sns-rds-psql-patch-test-sns-topic"
+               nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 
 <br>
 
@@ -259,6 +264,18 @@ Below log files will be generated in the logs directory for each option
 | Extension Update Log | Log of PostgreSQL extension updates | update_db_extensions_20230615-14-30-45.log |
 | Analyze Task Log | Log of ANALYZE command execution | run_db_task_analyze-20230615-14-30-45.log |
 | Unfreeze Task Log | Log of VACUUM (unfreeze) command execution | run_db_task_unfreeze-20230615-14-30-45.log |
+
+<br>
+
+## Testing
+To perform end-to-end testing of this process using AWS System Manager, please follow below steps.
+
+Note: This will create VPC, subnets, routes, ec2, RDS, security groups, IAM policy/role, NAT GW, EIP and others. 
+
+1. Run CloudFormation scrtipt [create_rds_psql_instance_cfn.yaml] (this creates VPC, subnets, routes, ec2, RDS, security groups, IAM policy/role, S3 bucket, SNS, etc.).
+2. Run CloudFormation script [create_ssm_rds_patch_automation_document.yaml] to create SSM automation document.
+3. Upload RDS patch shell script [rds_psql_patch.sh] to S3 bucket created in Step 1 above.
+4. Execute automation document from AWS Systems Manager console (use the steps listed in the section "Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager").
 
 <br>
 

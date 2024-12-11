@@ -352,7 +352,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-RDSInstance
-
+        - Key: UpgradeDB
+          Value: Y
 Outputs:
   VpcId:
     Description: VPC ID

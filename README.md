@@ -198,13 +198,10 @@ In this repository, we will guide you through setting up automation for pre-upgr
    
 2. Upload unix shell script *[rds_psql_patch.sh]* from this repo to S3 bucket
 
-3. Create SSM IAM policy and role using CFN *[create_ssm_rds_patch_iam_policy_role.yaml]*
+3. Create SSM automation document using CFN *[create_ssm_rds_patch_automation_document.yaml]*
     * Modify resource names appropriately
 
-4. Create SSM automation document using CFN *[create_ssm_rds_patch_automation_document.yaml]*
-    * Modify resource names appropriately
-
-5. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
+4. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
     * Identify major or minor version upgrade path as shown in the previous section
     * Provide appropriate input parameters. See below screenshots.
             -- Input parameters in SSM console

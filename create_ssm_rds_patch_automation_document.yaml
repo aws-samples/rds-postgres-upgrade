@@ -2,11 +2,24 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudFormation template for RDS PostgreSQL Fleet Upgrade Automation Document'
 
 Resources:
+
+  AutomationServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
+
   RDSPostgreSQLFleetUpgrade:
     Type: AWS::SSM::Document
     Properties:
       DocumentType: Automation
-      Name: RDSPostgreSQLFleetUpgrade
       Content:
         schemaVersion: '0.3'
         description: Upgrade fleet or RDS PostgreSQL instances
@@ -18,6 +31,7 @@ Resources:
           AssumeIAMRole:
             type: String
             description: The ARN of the role that allows Automation to perform the actions on your behalf.
+            default: !GetAtt AutomationServiceRole.Arn
           EC2InstanceId:
             type: String
             description: The ID of the existing EC2 Instance
@@ -31,9 +45,10 @@ Resources:
           SnsTopicArnEmail:
             type: String
             description: SNS Topic ARN for email notifications (optional)
+            default: " " # Set default value to empty string to make optional
           S3BucketName:
             type: String
-            description: The name of the S3 bucket containing the script and logs (optional)
+            description: The name of the S3 bucket containing the script and logs
           S3ScriptKey:
             type: String
             description: The S3 key (path) to the shell script
@@ -64,12 +79,18 @@ Resources:
                 commands:
                   - |
                     #!/bin/bash
-                    # Switch to ec2-user and set up environment
-                    sudo -u ec2-user bash << 'EOF'
+                    set -euo pipefail
+                    # e: exits on error
+                    # u: exits on undefined variables
+                    # o pipefail: exits if any command in a pipe fails
 
                     # Debug information
-                    echo "Current user: $(whoami)"
-                    echo "Home directory: $HOME"
+                    # echo "Current user: $(whoami)"
+                    # echo "Home directory: $HOME"
+
+                    # Setup environment
+                    export AWS_REGION="{{ global:REGION }}"
+                    export AWS_DEFAULT_REGION="{{ global:REGION }}"
 
                     # Create directory
                     mkdir -p {{ ScriptsDirOnEC2 }}
@@ -83,7 +104,6 @@ Resources:
                     # Verify final state
                     echo "Final script permissions:"
                     ls -la {{ ScriptsDirOnEC2 }}/rds_psql_patch.sh
-                    EOF
 
           - name: UpgradeInstances
             action: aws:runCommand
@@ -97,12 +117,48 @@ Resources:
                 commands:
                   - |
                     #!/bin/bash
-                    # Switch to ec2-user and set up environment
-                    sudo -u ec2-user bash << 'EOF'
+                    set -euo pipefail
+                    # e: exits on error
+                    # u: exits on undefined variables
+                    # o pipefail: exits if any command in a pipe fails
+
 
                     # Debug information
-                    echo "Current user: $(whoami)"
-                    echo "Home directory: $HOME"
+                    # echo "Current user: $(whoami)"
+                    # echo "Home directory: $HOME"
+
+                    # Setup environment
+                    export AWS_REGION="{{ global:REGION }}"
+                    export AWS_DEFAULT_REGION="{{ global:REGION }}"
+
+                    check_aws_cli_version() {
+                        # Check if aws command exists
+                        if ! command -v aws &> /dev/null; then
+                            echo "Error: AWS CLI is not installed"
+                            exit 1
+                        fi
+
+                        # Get version string
+                        VERSION=$(aws --version 2>&1)
+                        
+                        # Extract major version number
+                        if [[ $VERSION =~ aws-cli/([0-9]+)\. ]]; then
+                            MAJOR_VERSION="${BASH_REMATCH[1]}"
+                            
+                            if [ "$MAJOR_VERSION" -lt 2 ]; then
+                                echo "Error: AWS CLI version 2 or greater is required. Current version: $VERSION"
+                                exit 1
+                            else
+                                echo "AWS CLI version check passed: $VERSION"
+                            fi
+                        else
+                            echo "Error: Could not determine AWS CLI version from: $VERSION"
+                            exit 1
+                        fi
+                    }
+
+                    # Run the version check
+                    check_aws_cli_version
 
                     # Create logs directory with timestamp suffix for master log
                     TIMESTAMP=$(date '+%Y%m%d-%H-%M-%S')
@@ -113,9 +169,12 @@ Resources:
                       echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "${MASTER_LOG}"
                     }
 
-                    INSTANCES=$(aws rds describe-db-instances --filters "Name=engine,Values=postgres" \
-                      --query 'DBInstances[?contains(TagList[].Key, `{{ DBTagKey }}`) && contains(TagList[].Value, `{{ DBTagValue }}`)].[DBInstanceIdentifier]' \
-                      --output text)
+                    export TAG_KEY="{{ DBTagKey }}"
+                    export TAG_VALUE="{{ DBTagValue }}"
+                    INSTANCES=$(aws rds describe-db-instances --filters "Name=engine,Values=postgres" --output json | \
+                      jq -r --arg key "$TAG_KEY" --arg value "$TAG_VALUE" \
+                        '.DBInstances[] | select(.TagList[] | select(.Key==$key and .Value==$value)) | .DBInstanceIdentifier'
+                    )
                     log_message "Found instances to upgrade: ${INSTANCES}"
 
                     COUNT=0
@@ -180,9 +239,12 @@ Resources:
                     fi
 
                     exit $EXIT_STATUS
-                    EOF
 
 Outputs:
   SSMDocumentName:
     Description: Name of the SSM Automation Document
     Value: !Ref RDSPostgreSQLFleetUpgrade
+  SSMDocumentAssumeRoleArn:
+    Description: The ARN of the role that allows Automation to perform the actions on your behalf.
+    Value: !GetAtt AutomationServiceRole.Arn
+

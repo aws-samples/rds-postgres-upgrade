@@ -15,16 +15,12 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - rds:DescribeDBEngineVersions
-              - rds:DescribeOrderableDBInstanceOptions
-            Resource: "*"
-          - Effect: Allow
-            Action:
               - rds:DescribeDBInstances
               - rds:ModifyDBInstance
               - rds:RebootDBInstance
               - rds:CreateDBSnapshot
               - rds:DescribeDBSnapshots
+              - rds:DescribeDBEngineVersions
               - rds:DescribeOrderableDBInstanceOptions
               - rds:DescribeDBParameterGroups
               - rds:CreateDBParameterGroup

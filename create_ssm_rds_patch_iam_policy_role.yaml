@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for SSM Automation Role and Policy'
+
+Parameters:
+  EC2InstanceId:
+    Type: String
+    Description: The ID of the EC2 instance that will execute the SSM automation
+
+Resources:
+  SSMAutomationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RDSPSQLPatchRole-SSM
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
+      Policies:
+        - PolicyName: RDSPSQLPatchPolicy-SSM
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:StartAutomationExecution
+                  - ssm:GetAutomationExecution
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/RDSPostgreSQLFleetUpgrade:*'
+              - Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                  - ssm:GetCommandInvocation
+                Resource: 
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/RDSPostgreSQLFleetUpgrade'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-execution/*'
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${EC2InstanceId}'
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/RDSPSQLPatchRole-SSM'
+              - Effect: Allow
+                Action:
+                  - ssm:ListCommands
+                  - ssm:ListCommandInvocations
+                  - ssm:GetCommandInvocation
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/RDSPostgreSQLFleetUpgrade'
+
+Outputs:
+  SSMAutomationRoleARN:
+    Description: ARN of SSM Automation Service Role
+    Value: !GetAtt SSMAutomationRole.Arn

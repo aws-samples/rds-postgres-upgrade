@@ -343,6 +343,8 @@ Resources:
       DBParameterGroupName: !Ref RDSParameterGroup
       AllocatedStorage: 200
       BackupRetentionPeriod: 7
+      DeletionProtection: false
+      PubliclyAccessible: false
       MultiAZ: true
       VPCSecurityGroups:
         - !Ref RDSSecurityGroup

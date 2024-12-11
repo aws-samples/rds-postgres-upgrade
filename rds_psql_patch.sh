@@ -60,7 +60,7 @@
 #     update_extensions - function to update PostgreSQL extensions
 #     send_email - send email
 #     get_db_info - get database related info into local variables
-#     version_to_number - function to convert version number to integer
+#     check_rds_upgrade_version - check if the next-engine-version is valid for the current rds-postgresql instance version
 #
 ##-------------------------------------------------------------------------------------
 
@@ -123,17 +123,6 @@ echo -e "\nBEGIN -  ${EMAIL_SUBJECT} - `date`"
 
 ##-------------------------------------------------------------------------------------
 # functions #
-##-------------------------------------------------------------------------------------
-
-# function to convert version number to integer
-version_to_number() {
-    # Force base 10 interpretation by prepending "10#"
-    #echo "$1" | tr -d . | xargs printf "%06d" | sed 's/^/10#/'
-
-    local version_num=$(echo "$1" | tr -d .)
-    echo $((10#$version_num))  # Force base 10 interpretation inside arithmetic expansion
-
-}
 ##-------------------------------------------------------------------------------------
 
 # funtion to check DBInstance status #
@@ -692,46 +681,70 @@ function send_email() {
 }
 ##-------------------------------------------------------------------------------------
 
+# function to check if the next-engine-version is valid for the current rds-postgresql instance version #
+# Usage example: check_rds_upgrade_version "rds-psql-patch-instance-1" "16.6"
+check_rds_upgrade_version() {
+
+    local instance_id="$1"
+    local target_version="$2"
+    
+    echo -e "\nINFO: Checking if version ${target_version} is a valid upgrade target for ${instance_id}..."
+    
+    is_valid=$(aws rds describe-db-engine-versions \
+        --engine postgres \
+        --engine-version $(aws rds describe-db-instances \
+            --db-instance-identifier "$instance_id" \
+            --query 'DBInstances[0].EngineVersion' \
+            --output text) \
+        --query 'DBEngineVersions[0].ValidUpgradeTarget[*].EngineVersion' \
+        --output text | grep -q "$target_version" && echo "true" || echo "false")
+
+    if [ "$is_valid" = "false" ]; then
+        echo "INFO: Please check the available upgrade versions and try again"
+        echo -e "\nERROR: Version ${target_version} is not a valid upgrade target for instance ${instance_id} \n"
+        return 1
+    fi
+
+    echo -e "\nINFO: Version ${target_version} is a valid upgrade target \n"
+    return 0
+}
+##-------------------------------------------------------------------------------------
+
 # function to determine if upgrade/patching path is MINOR or MAJOR #
 function check_upgrade_type() {
+    echo -e "\nINFO: Checking upgrade type..."
 
-      echo -e "\nINFO: Execute check_upgrade_type function...\n"
+    # Extract major version numbers (family)
+    current_engine_version_family=$(echo "$current_engine_version" | cut -d. -f1)
+    next_engine_version_family=$(echo "$next_engine_version" | cut -d. -f1)
 
-      # EngineVersion NOT 10x THEN IF higher parameter group NOT exists THEN create a new parameter group
-      next_engine_version_family=`echo "${next_engine_version}" | cut -d. -f1`
+    echo "Current version: $current_engine_version (family: $current_engine_version_family)"
+    echo "Target version: $next_engine_version (family: $next_engine_version_family)"
 
-      # get next engine version (input parameter) #
-      echo "next_engine_version_family = $next_engine_version_family"
-      echo "next_engine_version = $next_engine_version"
+    # Compare versions directly without version_to_number function
+    if [ "$next_engine_version_family" -gt "$current_engine_version_family" ]; then
+        UPGRADE_SCOPE="major"
+        echo -e "\nINFO: Major version upgrade required (family $current_engine_version_family -> $next_engine_version_family)"
+        return 0
+    fi
 
-      # get current engine version #
-      current_engine_version=$(echo "${current_engine_version}" | bc)
-      echo "current_engine_version = $current_engine_version"
+    # Compare full versions for minor upgrade check
+    current_engine_version=$(echo "$current_engine_version" | tr -d '.')
+    next_engine_version=$(echo "$next_engine_version" | tr -d '.')
 
-      # if family is greater, then major version upgrade #
-      if [[ $(version_to_number "$next_engine_version_family") -gt $(version_to_number "$current_engine_version_family") ]]; then
-            #echo "Create new parameter group"
-            UPGRADE_SCOPE="major"
-            echo "UpgradeScope = ${UPGRADE_SCOPE}"
-            #create_param_group
-      else # if family is same, then check if minor version to patch is appropriate #
-         if [[ $(version_to_number "$current_engine_version") -eq $(version_to_number "$next_engine_version") ]]; then
-            	     echo -e "\nINFO: Current and next DB versions are same. Upgrade NOT required.\n"
-	 	     exit 0
-         elif [[ $(version_to_number "$current_engine_version") -gt $(version_to_number "$next_engine_version") ]]; then
-		     echo -e "\nINFO: Current DB version is greater than next DB version. Upgrade NOT required.\n"
-		     exit 0
-	     else # if $current_engine_version < $next_engine_version #
-		     echo -e "\nINFO: Current DB version is less than next DB version. Upgrade VALID.\n"
-            	     echo -e "INFO: DB Parameter Group Exists already. No need to create a new DB parameter group.\n"
-            	     UPGRADE_SCOPE="minor"
-                     echo "UpgradeScope = ${UPGRADE_SCOPE}"
-
-            	     db_param_group_name=${current_db_param_group}
-	      fi
-
-      fi
-
+    if [ "$current_engine_version" -eq "$next_engine_version" ]; then
+        echo -e "\nINFO: Current and target versions are identical. No upgrade required."
+        exit 0
+    elif [ "$current_engine_version" -gt "$next_engine_version" ]; then
+        echo -e "\nINFO: Current version is newer than target. No upgrade required."
+        exit 0
+    else
+        UPGRADE_SCOPE="minor"
+        echo -e "\nINFO: Minor version upgrade required"
+        echo "INFO: DB Parameter Group remains unchanged"
+        db_param_group_name=${current_db_param_group}
+        return 0
+    fi
 }
 ##-------------------------------------------------------------------------------------
 
@@ -902,75 +915,82 @@ get_db_info
 # DBEngine = postgres #
 if [ "${current_engine_type}" = "postgres" ]; then
 
-   # call function to check if upgrade/patching path is MINOR or MAJOR #
-   check_upgrade_type
+    # call function to check if the next-engine-version is valid for the current rds-postgresql instance version #
+    check_rds_upgrade_version "${current_db_instance_id}" "${next_engine_version}"
+    if [ $? -ne 0 ]; then
+        #echo -e "\nERROR: Invalid next engine version provided. Upgrade can not proceed.\n"
+        exit 1
+    fi
 
-   ### Run PreReq tasks one or few hours prior to the DB patching/upgrade #
-   ## Take DB snapshot
-   ## Run Freeze
-   ## Create DB parameter group if major version upgrade
-   if [ "${run_pre_upg_tasks}" = "PREUPGRADE" ]; then
+    # call function to check if upgrade/patching path is MINOR or MAJOR #
+    check_upgrade_type
 
-      if [ "${UPGRADE_SCOPE}" = "major" ]; then
-         echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
-         create_param_group
-      fi
+    ### Run PreReq tasks one or few hours prior to the DB patching/upgrade #
+    ## Take DB snapshot
+    ## Run Freeze
+    ## Create DB parameter group if major version upgrade
+    if [ "${run_pre_upg_tasks}" = "PREUPGRADE" ]; then
 
-      # call function to take DB snapshot/backup #
-      db_snapshot
+        if [ "${UPGRADE_SCOPE}" = "major" ]; then
+            echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
+            create_param_group
+        fi
 
-      #call function to run UnFreeze in database #
-      run_psql_command "FREEZE"
+        # call function to take DB snapshot/backup #
+        db_snapshot
 
-   else # run_pre_upg_tasks = UPG; perform upgrade/patching tasks
+        #call function to run UnFreeze in database #
+        run_psql_command "FREEZE"
 
-      echo "INFO: DB Parameter Group Exists already. No need to create a new DB parameter group."
-      #UPGRADE_SCOPE="minor"
-      db_param_group_name=${current_db_param_group}
-      
-      # take DB snapshot for MINOR version upgrade only; for MAJOR version, snapshot is taken automatically/default #
-      if [ "${UPGRADE_SCOPE}" = "minor" ]; then
-         echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
-         db_snapshot
-      fi
+    else # run_pre_upg_tasks = UPG; perform upgrade/patching tasks
 
-      # call function to check/drop replication slots - only for MAJOR version upgrade #
-      if [ "${UPGRADE_SCOPE}" = "major" ]; then
+        echo "INFO: DB Parameter Group Exists already. No need to create a new DB parameter group."
+        #UPGRADE_SCOPE="minor"
+        db_param_group_name=${current_db_param_group}
+        
+        # take DB snapshot for MINOR version upgrade only; for MAJOR version, snapshot is taken automatically/default #
+        if [ "${UPGRADE_SCOPE}" = "minor" ]; then
+            echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
+            db_snapshot
+        fi
 
-         # call function to create parameter group
-         # it is ok if this was run during PRE-REQUISITE stage (1 or few hours head of actuals upgradde)
-         create_param_group
+        # call function to check/drop replication slots - only for MAJOR version upgrade #
+        if [ "${UPGRADE_SCOPE}" = "major" ]; then
 
-         echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
-         run_psql_drop_repl_slot
+            # call function to create parameter group
+            # it is ok if this was run during PRE-REQUISITE stage (1 or few hours head of actuals upgradde)
+            create_param_group
 
-      fi
+            echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
+            run_psql_drop_repl_slot
 
-      ## below are common tasks that apply to major/minor version upgrade ##
-      
-      # call function to add DB logs to CloudWatch if not already #
-      db_modify_logs
+        fi
 
-      # run pending-maintenance task and also DB upgrade #
-      db_pending_maint
+        ## below are common tasks that apply to major/minor version upgrade ##
+        
+        # call function to add DB logs to CloudWatch if not already #
+        db_modify_logs
 
-      # call function to run DB upgrade #
-      db_upgrade
+        # run pending-maintenance task and also DB upgrade #
+        db_pending_maint
 
-      # call function to update PostgreSQL extensions
-      update_extensions
-   
-      # call function to run ANALYZE in database #
-      run_psql_command "ANALYZE"
+        # call function to run DB upgrade #
+        db_upgrade
 
-      # call function to run UnFreeze (vacuum) in database #
-      run_psql_command "UNFREEZE"
+        # call function to update PostgreSQL extensions
+        update_extensions
+    
+        # call function to run ANALYZE in database #
+        run_psql_command "ANALYZE"
 
-   fi
+        # call function to run UnFreeze (vacuum) in database #
+        run_psql_command "UNFREEZE"
+
+    fi
 
 else # current_engine_type != postgres
    
-   echo -e "\nERROR: Invalid DBInstance-ID or DBEngine is NOT PostgreSQL. Please check DBInstance-ID.\n"
+    echo -e "\nERROR: Invalid DBInstance-ID or DBEngine is NOT PostgreSQL. Please check DBInstance-ID.\n"
 
 fi
 ##-------------------------------------------------------------------------------------

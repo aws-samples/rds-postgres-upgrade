@@ -1,100 +1,228 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create complete RDS PostgreSQL testing environment with VPC, NAT
+  Gateway, and all required components
+
 Parameters:
-  EC2InstanceId:
+  EnvironmentName:
     Type: String
-    Description: ID of the EC2 instance to attach the profile to (e.g., i-0000d8667e6fa999999)
-    AllowedPattern: ^i-[a-zA-Z0-9]+$
-    ConstraintDescription: Must be a valid EC2 instance ID starting with 'i-'
+    Default: rds-test-env
+    Description: Environment name prefix for resources
+
+  VpcCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block for VPC
+
+  PublicSubnet1CIDR:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: CIDR block for public subnet 1
+
+  PrivateSubnet1CIDR:
+    Type: String
+    Default: 10.0.2.0/24
+    Description: CIDR block for private subnet 1
+
+  PrivateSubnet2CIDR:
+    Type: String
+    Default: 10.0.3.0/24
+    Description: CIDR block for private subnet 2
+
+  BucketNamePrefix:
+    Type: String
+    Default: rds-upgrade-scripts
+    Description: Prefix for S3 bucket name
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
 
 Resources:
-  RDSPSQLPatchPolicy:
-    Type: AWS::IAM::ManagedPolicy
+  # VPC and Networking Components
+  VPC:
+    Type: AWS::EC2::VPC
     Properties:
-      ManagedPolicyName: RDSPSQLPatchPolicy
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action:
-              - rds:DescribeDBEngineVersions
-              - rds:DescribeOrderableDBInstanceOptions
-            Resource: "*"
-          - Effect: Allow
-            Action:
-              - rds:DescribeDBInstances
-              - rds:ModifyDBInstance
-              - rds:RebootDBInstance
-              - rds:CreateDBSnapshot
-              - rds:DescribeDBSnapshots
-              - rds:DescribeOrderableDBInstanceOptions
-              - rds:DescribeDBParameterGroups
-              - rds:CreateDBParameterGroup
-              - rds:ModifyDBParameterGroup
-              - rds:DescribeDBParameters
-              - rds:DescribePendingMaintenanceActions
-              - rds:ApplyPendingMaintenanceAction
-              - rds:AddTagsToResource
-              - rds:ListTagsForResource
-            Resource: 
-              - arn:aws:rds:*:*:db:*
-              - arn:aws:rds:*:*:pg:*
-              - arn:aws:rds:*:*:snapshot:*
-          - Effect: Allow
-            Action:
-              - iam:GetRole
-              - iam:ListRoles
-            Resource: arn:aws:iam::*:role/rds-psql-patch-*
-          - Effect: Allow
-            Action:
-              - cloudwatch:PutMetricData
-              - cloudwatch:GetMetricStatistics
-              - cloudwatch:ListMetrics
-            Resource: arn:aws:cloudwatch:*:*:metric-stream/rds-psql-patch-*
-          - Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-              - logs:DescribeLogStreams
-              - logs:GetLogEvents
-            Resource:
-              - arn:aws:logs:*:*:log-group:rds-psql-patch-*
-              - arn:aws:logs:*:*:log-group:rds-psql-patch-*:log-stream:*
-          - Effect: Allow
-            Action:
-              - s3:PutObject
-              - s3:GetObject
-              - s3:ListBucket
-            Resource:
-              - arn:aws:s3:::rds-psql-patch-*
-              - arn:aws:s3:::rds-psql-patch-*/*
-          - Effect: Allow
-            Action:
-              - secretsmanager:GetSecretValue
-            Resource: arn:aws:secretsmanager:*:*:secret:rds*
-          - Effect: Allow
-            Action:
-              - sns:Publish
-            Resource: "arn:aws:sns:*:*:rds-psql-patch-*"
-          - Effect: Allow
-            Action:
-              - kms:Decrypt
-              - kms:GenerateDataKey
-              - kms:CreateGrant
-              - kms:ReEncrypt*
-              - kms:DescribeKey
-            Resource:
-              - arn:aws:kms:*:*:key/rds-psql-patch-*
-          - Effect: Allow
-            Action:
-              - ec2:DescribeInstances
-              - ec2:DescribeTags
-            Resource: 
-              - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${EC2InstanceId}'
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-VPC
 
-  RDSPSQLPatchRole:
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-IGW
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Ref PublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PublicSubnet1
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateSubnet1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateSubnet2
+
+  # NAT Gateway Configuration
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NatGW
+
+  # Route Tables
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PublicRT
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateRT
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet2
+
+  # Security Groups
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for EC2 instance
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref VpcCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-EC2-SG
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for RDS instance
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-RDS-SG
+
+  # SNS Topic
+  RdsUpgradeTestSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${EnvironmentName}-RdsUpgradeTestSnsTopic
+
+  # S3 Bucket
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${BucketNamePrefix}-${AWS::Region}-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # IAM Roles and Policies
+  InstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: RDSPSQLPatchRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -102,29 +230,170 @@ Resources:
             Principal:
               Service:
                 - ec2.amazonaws.com
-            Action: sts:AssumeRole
+            Action:
+              - sts:AssumeRole
       ManagedPolicyArns:
-        - !Ref RDSPSQLPatchPolicy
-      Path: /
-      Tags:
-        - Key: Purpose
-          Value: RDSPostgreSQLPatching
-
-  RDSPSQLPatchInstanceProfile:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: RDSUpgradeInstancePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:DescribeDBEngineVersions
+                  - rds:DescribeOrderableDBInstanceOptions
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - rds:DescribeDBInstances
+                  - rds:ModifyDBInstance
+                  - rds:RebootDBInstance
+                  - rds:CreateDBSnapshot
+                  - rds:DescribeDBSnapshots
+                  - rds:DescribeOrderableDBInstanceOptions
+                  - rds:DescribeDBParameterGroups
+                  - rds:CreateDBParameterGroup
+                  - rds:ModifyDBParameterGroup
+                  - rds:DescribeDBParameters
+                  - rds:DescribePendingMaintenanceActions
+                  - rds:ApplyPendingMaintenanceAction
+                  - rds:AddTagsToResource
+                  - rds:ListTagsForResource
+                Resource:
+                  - !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:db:*
+                  - !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:pg:*
+                  - !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:snapshot:*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:aws:s3:::${S3Bucket}
+                  - !Sub arn:aws:s3:::${S3Bucket}/*
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref RdsUpgradeTestSnsTopic
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:secret:rds*
+  InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: RDSPSQLPatchProfile
-      Path: /
       Roles:
-        - !Ref RDSPSQLPatchRole
+        - !Ref InstanceRole
+
+  # EC2 Instance
+  ToolsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      EbsOptimized: true
+      IamInstanceProfile: !Ref InstanceProfile
+      ImageId: !Ref LatestAmiId
+      InstanceType: t3.micro
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      SubnetId: !Ref PrivateSubnet1
+      UserData: !Base64
+        Fn::Sub: |
+          #!/bin/bash
+          yum update -y
+          yum install -y postgresql15 jq awscli
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ToolsInstance
+
+  # RDS Components
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS VPC Subnet Group
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DBSubnetGroup
+
+  RDSParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Family: postgres14
+      Description: RDS PostgreSQL parameter group
+      Parameters:
+        rds.force_ssl: 1
+        rds.logical_replication: 1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DBParameterGroup
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub ${EnvironmentName}-postgres
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      EngineVersion: '14.9'
+      MasterUsername: postgres
+      ManageMasterUserPassword: true
+      DBParameterGroupName: !Ref RDSParameterGroup
+      AllocatedStorage: 200
+      BackupRetentionPeriod: 7
+      MultiAZ: true
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      DBName: rdspatch
+      StorageEncrypted: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-RDSInstance
 
 Outputs:
-  RoleArn:
-    Description: ARN of the created IAM Role
-    Value: !GetAtt RDSPSQLPatchRole.Arn
-  PolicyArn:
-    Description: ARN of the created IAM Policy
-    Value: !Ref RDSPSQLPatchPolicy
-  InstanceProfileArn:
-    Description: ARN of the created Instance Profile
-    Value: !GetAtt RDSPSQLPatchInstanceProfile.Arn
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+
+  PublicSubnet1:
+    Description: Public Subnet 1 ID
+    Value: !Ref PublicSubnet1
+
+  PrivateSubnet1:
+    Description: Private Subnet 1 ID
+    Value: !Ref PrivateSubnet1
+
+  PrivateSubnet2:
+    Description: Private Subnet 2 ID
+    Value: !Ref PrivateSubnet2
+
+  NatGatewayId:
+    Description: NAT Gateway ID
+    Value: !Ref NatGateway
+
+  NatGatewayEIP:
+    Description: NAT Gateway Elastic IP
+    Value: !Ref NatGatewayEIP
+
+  S3BucketName:
+    Description: S3 Bucket Name
+    Value: !Ref S3Bucket
+
+  SnsTopicArn:
+    Description: SNS Topic ARN
+    Value: !Ref RdsUpgradeTestSnsTopic
+
+  EC2InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref ToolsInstance
+
+  RDSEndpoint:
+    Description: RDS Instance Endpoint
+    Value: !GetAtt RDSInstance.Endpoint.Address
+
+  RDSPort:
+    Description: RDS Instance Port
+    Value: !GetAtt RDSInstance.Endpoint.Port

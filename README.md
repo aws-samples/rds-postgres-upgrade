@@ -173,23 +173,34 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 7. Syntax:
 
-   ```
-         ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [run-pre-check]
-         ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
+      a. Set up log file location in the environment (optional).
+         If this variable is not set, log files will not be copied over to S3 bucket.
+   
+            export S3_BUCKET_PATCH_LOGS="<s3-bucket-name>"
+            e.g.: export S3_BUCKET_PATCH_LOGS="s3-rds-psql-patch-test-bucket"
+   
+      b. Configure email notification (optional)
+         If this variable is not set, this process will not send notification at the end of this upgrade process.
+   
+            export SNS_TOPIC_ARN_EMAIL="<sns-topic-arn>"
+            e.g.: export SNS_TOPIC_ARN_EMAIL="arn:aws:sns:us-east-1:11111111111:sns-rds-psql-patch-test-sns-topic"
+           
+      c. Execute upgrade process.
 
-         PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
-         UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
+               ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [run-pre-check]
+               ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 
-         Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
-               for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
-   ```
+               PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
+               UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
       
-8. Example Usage:
+               Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
+                     for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
+      
+9. Example Usage:
 
-   ```
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.10 PREUPGRADE >rds-psql-patch-instance-1-preupgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
            nohup ./rds_psql_patch.sh rds-psql-patch-instance-1 14.15 UPGRADE >rds-psql-patch-instance-1-upgrade-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
-   ```
+
 <br>
 
 ## Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager

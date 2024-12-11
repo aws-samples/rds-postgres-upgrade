@@ -91,22 +91,22 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 ## Setup - Upgrade single RDS PostgreSQL instance
 
-1. Prerequisites:
+1. Prerequisites
    
    ```
      a. AWS resources required:
    
-        i. EC2 instance primarily to store and run upgrade script, and store log files
+        i. EC2 instance primarily to store and run upgrade script, and store log files.
    
                - Required Tools:
                      -- AWS CLI
                      -- PostgreSQL client utility
                      -- jq for JSON processing
    
-        ii. IAM profile attached to EC2 instance with necessary permissions
+        ii. IAM profile attached to EC2 instance with necessary permissions.
    
                 - [create_rds_psql_patch_iam_policy_role_cfn.yaml] can be used to create an IAM policy and role.
-                         -- Modify resource names appropriately
+                         Note: Modify resource names appropriately
    
                 - Attach this IAM role to ec2 instance
 
@@ -118,29 +118,34 @@ In this repository, we will guide you through setting up automation for pre-upgr
                 - Parameter group
                 - AWS Secrets Manager secret attached to each RDS instance
                 - [create_rds_psql_instance_cfn.yaml] can be used to create DB Parameter group and RDS PostgreSQL instance
-                      -- Modify resource names appropriately
+                      Note: Modify resource names appropriately
       
         vi. S3 bucket to store scripts and logs (optional)
    
         v. SNS topic for notifications (optional)
 
-     b. Network Configuration:
+     b. Network Configuration.
    
         - Database security group must allow inbound traffic from EC2 instance
    
-3. Clone the repository:
+3. Clone the repository.
    ```
    git clone https://github.com/aws-samples/rds-postgres-upgrade.git
    ```
    
-4. Navigate to the project directory:
+4. Navigate to the project directory.
    ```
    cd rds-postgres-upgrade
    ```
-   
-5. Update environment variables in the shell script *[rds_psql_patch.sh]*, if required (optional)
 
-6. Identify minor or major upgrade path. Below is an example AWS CLI command to identify appropriate upgrade path for RDS PostgreSQL 14.9
+5. Grant execute permission on the shell script.
+
+   ```
+   chmod u+x rds_psql_patch.sh
+   ```
+6. Update environment variables in the shell script *[rds_psql_patch.sh]*, if required (optional).
+
+7. Identify minor or major upgrade path. Below is an example AWS CLI command to identify appropriate upgrade path for RDS PostgreSQL 14.9.
  
       ```
             aws rds describe-db-engine-versions \
@@ -168,9 +173,14 @@ In this repository, we will guide you through setting up automation for pre-upgr
             |  15.9          |  True                   |
             |  15.10         |  True                   |
             +----------------+-------------------------+
+
+            Based on the above output:
+      
+                  - For version 14.9, 14.10 thru 14.15 are valid minor version upgrade paths.
+                  - For version 14.9, 15.4 thru 15.10 are valid major version upgrade paths.
       ```
 
-7. Execute upgrade process
+8. Execute upgrade process.
 
       a. Set up log file location in the environment (optional).
          If this variable is not set, log files will not be copied over to S3 bucket.
@@ -179,14 +189,14 @@ In this repository, we will guide you through setting up automation for pre-upgr
    
             e.g.: export S3_BUCKET_PATCH_LOGS="s3-rds-psql-patch-test-bucket"
    
-      b. Configure email notification (optional)
+      b. Configure email notification (optional).
          If this variable is not set, this process will not send notification at the end of this upgrade process.
    
             export SNS_TOPIC_ARN_EMAIL="<sns-topic-arn>"
    
             e.g.: export SNS_TOPIC_ARN_EMAIL="arn:aws:sns:us-east-1:11111111111:sns-rds-psql-patch-test-sns-topic"
            
-      c. Execute upgrade process.
+      c. Execute upgrade script.
 
                ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [run-pre-check]
    
@@ -221,11 +231,11 @@ In this repository, we will guide you through setting up automation for pre-upgr
 2. Upload unix shell script *[rds_psql_patch.sh]* from this repo to S3 bucket
 
 3. Create SSM automation document using CFN *[create_ssm_rds_patch_automation_document.yaml]*
-    * Modify resource names appropriately
+         Note: Modify resource names appropriately
 
 4. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
-    * Identify major or minor version upgrade path as shown in the previous section
-    * Provide appropriate input parameters. See below screenshots.
+      - Identify major or minor version upgrade path as shown in the previous section
+      - Provide appropriate input parameters. See below screenshots.
             -- Input parameters in SSM console
             ![rds-patch-ssm-input-parameters.png](./rds-patch-ssm-input-parameters.png)
 

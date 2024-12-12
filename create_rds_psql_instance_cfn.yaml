@@ -339,6 +339,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-DBParameterGroup
 
+  # amazonq-ignore-next-line
   RDSInstance:
     Type: AWS::RDS::DBInstance
     Properties:

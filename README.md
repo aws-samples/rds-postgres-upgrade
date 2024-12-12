@@ -14,15 +14,16 @@ In this repository, we will guide you through setting up automation for pre-upgr
 - [Features](#features)
 - [Architecture](#architecture)
   - [Upgrade single RDS PostgreSQL instance](#upgrade-single-rds-postgresql-instance)
-  - [Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager](#upgrade-fleet-of-rds-postgresql-instances-using-aws-systems-manager)
+  - [Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager](#upgrade-fleet-of-rds-postgresql-instances-using-aws-systems-manager-1)
 - [High-level Tasks with PREUPGRADE and UPGRADE options](#high-level-tasks-with-preupgrade-and-upgrade-options)
   - [PREUPGRADE Tasks](#preupgrade-tasks)
   - [UPGRADE Tasks](#upgrade-tasks)
 - [Flow Charts](#flow-charts)
   - [Upgrade single RDS PostgreSQL instance](#upgrade-single-rds-postgresql-instance-1)
   - [Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager](#upgrade-fleet-of-rds-postgresql-instances-using-aws-systems-manager-1)
-- [Setup - Upgrade single RDS PostgreSQL instance](#setup---upgrade-single-rds-postgresql-instance)
-- [Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager](#setup---upgrade-fleet-of-rds-postgresql-instances-using-aws-systems-manager)
+- [Setup](#setup)
+  - [Setup - Upgrade single RDS PostgreSQL instance](#setup---upgrade-single-rds-postgresql-instance)
+  - [Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager](#setup---upgrade-fleet-of-rds-postgresql-instances-using-aws-systems-manager)
 - [Log Files](#log-files)
 - [Testing](#testing)
 - [Conclusion](#conclusion)
@@ -109,7 +110,9 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 <br>
 
-## Setup - Upgrade single RDS PostgreSQL instance
+## Setup
+
+### Setup - Upgrade single RDS PostgreSQL instance
 
 1. Prerequisites
    
@@ -244,7 +247,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
 
 <br>
 
-## Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager
+### Setup - Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager
 
 1. Prerequisites from the above section apply to this section as well.
    
@@ -302,7 +305,7 @@ To perform end-to-end testing of this process using AWS System Manager, perform 
 
 **Note**: This will create VPC, subnets, routes, ec2, RDS, security groups, IAM policy/role, NAT, IGW, EIP and others. 
 
-1. Run CloudFormation scrtipt [create_rds_psql_instance_cfn.yaml] to create complete test stack.
+1. Run CloudFormation scrtipt [create_rds_psql_instance_cfn.yaml] to create complete test stack with input parameter values.
 
 2. Run CloudFormation script [create_ssm_rds_patch_automation_document.yaml] to create SSM automation document.
 

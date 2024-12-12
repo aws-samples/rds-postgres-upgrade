@@ -128,7 +128,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
    
         ii. IAM profile attached to EC2 instance with necessary permissions.
    
-                - [create_rds_psql_patch_iam_policy_role_cfn.yaml] can be used to create an IAM policy and role.
+                - Refer to [create_rds_psql_instance_cfn.yaml] file for required permissions.
                          Note: Modify resource names appropriately
    
                 - Attach this IAM role to ec2 instance
@@ -140,7 +140,7 @@ In this repository, we will guide you through setting up automation for pre-upgr
                 - Security group(s)
                 - Parameter group
                 - AWS Secrets Manager secret attached to each RDS instance
-                - [create_rds_psql_instance_cfn.yaml] can be used to create DB Parameter group and RDS PostgreSQL instance
+                - Refer to [create_rds_psql_instance_cfn.yaml] file for required permissions.
                       Note: Modify resource names appropriately
       
         vi. S3 bucket to store scripts and logs (optional)

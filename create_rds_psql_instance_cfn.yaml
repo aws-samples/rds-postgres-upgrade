@@ -253,6 +253,11 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
+                  - rds:DescribeDBEngineVersions
+                  - rds:DescribeOrderableDBInstanceOptions
+                Resource: '*'
+              - Effect: Allow
+                Action:
                   - rds:DescribeDBInstances
                   - rds:ModifyDBInstance
                   - rds:RebootDBInstance

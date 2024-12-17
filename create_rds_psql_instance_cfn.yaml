@@ -10,7 +10,7 @@ Parameters:
 
   VpcCIDR:
     Type: String
-    Default: 10.0.0.0/16
+    Default: 10.0.1.0/16
     Description: CIDR block for VPC
 
   PublicSubnet1CIDR:
@@ -36,6 +36,11 @@ Parameters:
   LatestAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+
+  NotificationEmail:
+    Type: String
+    Description: Email address for RDS notifications
+    AllowedPattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
 
 Resources:
   # VPC and Networking Components
@@ -196,11 +201,18 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-RDS-SG
 
-  # SNS Topic
+   # SNS Topic
   RdsUpgradeTestSnsTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: !Sub ${EnvironmentName}-RdsUpgradeTestSnsTopic
+
+  RdsUpgradeTestSnsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref RdsUpgradeTestSnsTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
 
   # S3 Bucket
   S3Bucket:
@@ -251,6 +263,7 @@ Resources:
                   - rds:RebootDBInstance
                   - rds:CreateDBSnapshot
                   - rds:DescribeDBSnapshots
+                  - rds:DescribeDBEngineVersions
                   - rds:DescribeOrderableDBInstanceOptions
                   - rds:DescribeDBParameterGroups
                   - rds:CreateDBParameterGroup
@@ -280,7 +293,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource:
-                  - !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:secret:rds*
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds*
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -331,6 +344,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-DBParameterGroup
 
+  # amazonq-ignore-next-line
   RDSInstance:
     Type: AWS::RDS::DBInstance
     Properties:

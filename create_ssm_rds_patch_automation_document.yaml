@@ -44,12 +44,12 @@ Resources:
               - UPGRADE
           SnsTopicArnEmail:
             type: String
-            description: SNS Topic ARN for email notifications (optional)
-            default: "" # Set default value to empty string to make optional
+            description: SNS Topic ARN for email notifications
+            default: ""
           S3BucketName:
             type: String
-            description: The name of the S3 bucket containing the script and logs (optional)
-            default: "" # Set default value to empty string to make optional
+            description: Name of the S3 bucket containing the shell script and related log files can be stored
+            default: ""
           S3ScriptKey:
             type: String
             description: The S3 key (path) to the shell script

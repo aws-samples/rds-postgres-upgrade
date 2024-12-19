@@ -3,6 +3,11 @@ Description: Create complete RDS PostgreSQL testing environment with VPC, NAT
   Gateway, and all required components
 
 Parameters:
+  RDSMasterUsername:
+    Type: String
+    Description: RDS Master Username
+    NoEcho: true
+
   EnvironmentName:
     Type: String
     Default: rds-test-env
@@ -183,6 +188,13 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: !Ref VpcCIDR
+          Description: Management access
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref VpcCIDR
+          Description: Management access
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-EC2-SG
@@ -197,6 +209,13 @@ Resources:
           FromPort: 5432
           ToPort: 5432
           SourceSecurityGroupId: !Ref EC2SecurityGroup
+          Description: DB access
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+          Description: Outbound access
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-RDS-SG
@@ -206,6 +225,25 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: !Sub ${EnvironmentName}-RdsUpgradeTestSnsTopic
+      KmsMasterKeyId: alias/aws/sns
+
+  RdsUpgradeTestSnsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Sid: DenyInsecure
+            Effect: Deny
+            Principal: '*'
+            Action: 'sns:Publish'
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+            Resource:
+              - !Ref RdsUpgradeTestSnsTopic
+      Topics:
+        - !Ref RdsUpgradeTestSnsTopic
+
 
   RdsUpgradeTestSnsSubscription:
     Type: AWS::SNS::Subscription
@@ -230,6 +268,23 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Sid: DenyInsecureAccess
+          Action: "*"
+          Effect: Deny
+          Resource:
+            - !Sub arn:aws:s3:::${S3Bucket}
+            - !Sub arn:aws:s3:::${S3Bucket}/*
+          Condition:
+            Bool:
+              "aws:SecureTransport": false
+          Principal: "*"
 
   # IAM Roles and Policies
   InstanceRole:
@@ -348,11 +403,10 @@ Resources:
   RDSInstance:
     Type: AWS::RDS::DBInstance
     Properties:
-      DBInstanceIdentifier: !Sub ${EnvironmentName}-postgres
       DBInstanceClass: db.t3.micro
       Engine: postgres
       EngineVersion: '14.9'
-      MasterUsername: postgres
+      MasterUsername: !Ref RDSMasterUsername
       ManageMasterUserPassword: true
       DBParameterGroupName: !Ref RDSParameterGroup
       AllocatedStorage: 200

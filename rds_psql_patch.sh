@@ -82,6 +82,7 @@ PSQL_BIN=$(which psql)
 # Environment Variables - Misc. - Manual #
 db_snapshot_required="Y"  # set this to Y if manual snapshot is required #
 db_parameter_modify="N"  # set this to Y if security and replication related parameters needs to be enabled; if not set it to N. Used in create_param_group function #
+db_drop_replication_slot="N"  # set this to Y if replication slots needs to be dropped automatically by this process, as part of major version upgrade #
 DATE_TIME=$(date +'%Y%m%d-%H-%M-%S')
 
 ##-------------------------------------------------------------------------------------
@@ -539,7 +540,8 @@ function run_psql_drop_repl_slot() {
 
         # Process replication slots if they exist
         if [ "${repl_slot_count}" -gt 0 ]; then
-            echo "INFO: Found ${repl_slot_count} replication slot(s). Processing..."
+
+            echo "INFO: Found ${repl_slot_count} replication slot(s)."
             
             # Log current replication slots
             echo "INFO: Capturing current replication slot details..."
@@ -549,47 +551,55 @@ function run_psql_drop_repl_slot() {
                 -c "SELECT slot_name, plugin, slot_type, database, active, xmin FROM pg_replication_slots"
             echo "----------------------------------------"
 
-            # Drop replication slots
-            echo "INFO: Dropping replication slots..."
-            drop_result=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
-                -c "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN (SELECT slot_name FROM pg_replication_slots)" 2>&1)
-            
-            if [ $? -ne 0 ]; then
-                echo "ERROR: Failed to drop replication slots:"
+            if [ "${db_drop_replication_slot}" = "Y" ]; then 
+
+                # Drop replication slots
+                echo "INFO: Dropping replication slots..."
+                drop_result=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
+                    -c "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN (SELECT slot_name FROM pg_replication_slots)" 2>&1)
+                
+                if [ $? -ne 0 ]; then
+                    echo "ERROR: Failed to drop replication slots:"
+                    echo "${drop_result}"
+                    return 1
+                fi
+
+                echo "Drop operation result:"
+                echo "----------------------------------------"
                 echo "${drop_result}"
-                return 1
-            fi
+                echo "----------------------------------------"
 
-            echo "Drop operation result:"
-            echo "----------------------------------------"
-            echo "${drop_result}"
-            echo "----------------------------------------"
+                # Verify slots were dropped
+                echo "INFO: Verifying replication slots after drop operation..."
+                echo "Remaining replication slots:"
+                echo "----------------------------------------"
+                ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
+                    -c "SELECT slot_name, plugin, slot_type, database, active, xmin FROM pg_replication_slots"
+                echo "----------------------------------------"
 
-            # Verify slots were dropped
-            echo "INFO: Verifying replication slots after drop operation..."
-            echo "Remaining replication slots:"
-            echo "----------------------------------------"
-            ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
-                -c "SELECT slot_name, plugin, slot_type, database, active, xmin FROM pg_replication_slots"
-            echo "----------------------------------------"
+                # Final count verification
+                final_count=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots")
+                
+                if [ $? -ne 0 ]; then
+                    echo "ERROR: Failed to get final replication slot count"
+                    return 1
+                fi
 
-            # Final count verification
-            final_count=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots")
-            
-            if [ $? -ne 0 ]; then
-                echo "ERROR: Failed to get final replication slot count"
-                return 1
-            fi
+                echo "INFO: Final replication slot count = ${final_count}"
 
-            echo "INFO: Final replication slot count = ${final_count}"
+                if [ "${final_count}" -eq 0 ]; then
+                    echo "SUCCESS: All replication slots were successfully dropped."
+                else
+                    echo "ERROR: ${final_count}  replication slots still exist. Upgrade cannot proceed until they are dropped."
+                fi
 
-            if [ "${final_count}" -eq 0 ]; then
-                echo "SUCCESS: All replication slots were successfully dropped."
             else
-                echo "WARNING: ${final_count} replication slots still remain."
+                echo "ERROR: ${final_count} replication slot(s) detected. All replication slots MUST be dropped before proceeding with the major version upgrade to ensure success."
             fi
+
         else
             echo "INFO: No replication slots found. No action needed."
+
         fi
 
         echo "----------------------------------------------------------------"
@@ -929,11 +939,17 @@ if [ "${current_engine_type}" = "postgres" ]; then
     ## Take DB snapshot
     ## Run Freeze
     ## Create DB parameter group if major version upgrade
+    ## Check replication slots if major version upgrade
     if [ "${run_pre_upg_tasks}" = "PREUPGRADE" ]; then
 
         if [ "${UPGRADE_SCOPE}" = "major" ]; then
             echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
+
+            # Create DB parameter group if major version upgrade #
             create_param_group
+
+            # call function to check/drop replication slots - only for MAJOR version upgrade #
+            run_psql_drop_repl_slot
         fi
 
         # call function to take DB snapshot/backup #
@@ -942,7 +958,7 @@ if [ "${current_engine_type}" = "postgres" ]; then
         #call function to run UnFreeze in database #
         run_psql_command "FREEZE"
 
-    else # run_pre_upg_tasks = UPG; perform upgrade/patching tasks
+    else # run_pre_upg_tasks = UPGRADE; perform upgrade/patching tasks
 
         echo "INFO: DB Parameter Group Exists already. No need to create a new DB parameter group."
         #UPGRADE_SCOPE="minor"
@@ -957,11 +973,13 @@ if [ "${current_engine_type}" = "postgres" ]; then
         # call function to check/drop replication slots - only for MAJOR version upgrade #
         if [ "${UPGRADE_SCOPE}" = "major" ]; then
 
+            echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
+
             # call function to create parameter group
-            # it is ok if this was run during PRE-REQUISITE stage (1 or few hours head of actuals upgradde)
+            # it is ok if this was run during PRE-REQUISITE stage (1 or few hours head of actual upgradde)
             create_param_group
 
-            echo -e "\nUPGRADE_SCOPE = ${UPGRADE_SCOPE}\n"
+            # call function to check (and drop if variable db_drop_replication_slot is set to Y) replication slots - only for MAJOR version upgrade #
             run_psql_drop_repl_slot
 
         fi

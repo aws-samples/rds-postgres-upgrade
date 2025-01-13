@@ -71,22 +71,23 @@ This repository will guide you through setting up automation for pre-upgrade che
 
 ### PREUPGRADE Tasks
 
-      1. Create new parameter group
-      2. Take database snapshot
-      3. VACUUM FREEZE.
+      1. Create new parameter group when upgrade type = Major
+      2. Check replication slot(s) when upgrade type = Major
+      3. Take database snapshot
+      4. Vacuum freeze.
 
 <br>
 
 ### UPGRADE Tasks
 
-      1. Create new parameter group
-      2. Take database snapshot
-      3. Drop replication slot(s)
-      4. OS maintenance
+      1. Create new parameter group when upgrade type = Major
+      2. Take database snapshot when upgrade type = Minor (for Major, pre-upgrade snapshot is taken by default db_upgrade "modify-db-instance" call)
+      3. Drop replication slot(s) when upgrade type = Major if variable db_drop_replication_slot is set to Y
+      4. OS maintenance (pending maintenance)
       5. Database version upgrade
       6. PostgreSQL extensions update
-      7. Analyze
-      8. VACUUM (unfreeze).
+      7. Run analyze database
+      8. Vacuum unfreeze.
 
 <br>
 

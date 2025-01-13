@@ -325,7 +325,7 @@ We recommend validating the solution in a non-production environment before impl
 
 ## Disclaimer
 
-This script is provided as-is. Please review and test thoroughly before using in a production environment.
+We recommend you deploy and validate this solution in a non-production environment first prior to using it in production environment.
 
 This README provides an overview of your script, including its purpose, how to use it, prerequisites, and a brief description of its functions and environment variables. It also includes some usage examples and notes about the script's behavior. You can adjust or expand this README as needed to provide more detailed information about your script.
 

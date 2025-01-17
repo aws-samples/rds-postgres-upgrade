@@ -135,7 +135,7 @@ Resources:
                     check_aws_cli_version() {
                         # Check if aws command exists
                         if ! command -v aws &> /dev/null; then
-                            echo "Error: AWS CLI is not installed"
+                            echo "ERROR: AWS CLI is not installed"
                             exit 1
                         fi
 
@@ -147,13 +147,13 @@ Resources:
                             MAJOR_VERSION="${BASH_REMATCH[1]}"
                             
                             if [ "$MAJOR_VERSION" -lt 2 ]; then
-                                echo "Error: AWS CLI version 2 or greater is required. Current version: $VERSION"
+                                echo "ERROR: AWS CLI version 2 or greater is required. Current version: $VERSION"
                                 exit 1
                             else
-                                echo "AWS CLI version check passed: $VERSION"
+                                echo "INFO: AWS CLI version check passed: $VERSION"
                             fi
                         else
-                            echo "Error: Could not determine AWS CLI version from: $VERSION"
+                            echo "ERROR: Could not determine AWS CLI version from: $VERSION"
                             exit 1
                         fi
                     }
@@ -176,13 +176,13 @@ Resources:
                       jq -r --arg key "$TAG_KEY" --arg value "$TAG_VALUE" \
                         '.DBInstances[] | select(.TagList[] | select(.Key==$key and .Value==$value)) | .DBInstanceIdentifier'
                     )
-                    log_message "Found instances to upgrade: ${INSTANCES}"
+                    log_message "INFO: Found instances to upgrade: ${INSTANCES}"
 
                     COUNT=0
                     declare -a PIDS=()
 
                     cleanup() {
-                      log_message "Cleaning up background processes..."
+                      log_message "INFO: Cleaning up background processes..."
                       for pid in "${PIDS[@]}"; do
                         kill -9 $pid 2>/dev/null || true
                       done
@@ -203,17 +203,17 @@ Resources:
 
                       (
                         cd {{ ScriptsDirOnEC2 }}
-                        log_message "Starting upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
+                        log_message "INFO: Starting upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
                         if ./rds_psql_patch.sh "$INSTANCE" {{ TargetEngineVersion }} {{ RunPreUpgradeTasks }} >> "$INSTANCE_LOG" 2>&1; then
-                          log_message "Completed upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
+                          log_message "INFO: Completed upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
                         else
-                          log_message "Failed upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
+                          log_message "ERROR: Failed upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
                           exit 1
                         fi
                       ) &
                       PIDS+=($!)
                       COUNT=$((COUNT+1))
-                      log_message "Started upgrade process for ${INSTANCE} with PID ${PIDS[-1]}"
+                      log_message "INFO: Started upgrade process for ${INSTANCE} with PID ${PIDS[-1]}"
                     done
 
                     EXIT_STATUS=0
@@ -226,16 +226,16 @@ Resources:
                       fi
                     done
 
-                    log_message "Upgrade initiated for $COUNT instances"
+                    log_message "INFO: Upgrade initiated for $COUNT instances"
 
                     if [ $EXIT_STATUS -eq 0 ]; then
-                      log_message "All upgrades completed successfully"
+                      log_message "INFO: All upgrades completed successfully"
                     else
-                      log_message "Some upgrades failed. Failed instances:${FAILED_INSTANCES}"
+                      log_message "ERROR: Some upgrades failed. Failed instances:${FAILED_INSTANCES}"
                     fi
 
                     if [ -n "{{ S3BucketName }}" ]; then
-                      log_message "Uploading logs to S3..."
+                      log_message "INFO: Uploading logs to S3..."
                       aws s3 cp {{ ScriptsDirOnEC2 }}/logs s3://{{ S3BucketName }}/logs/$(date '+%Y-%m-%d')/ --recursive
                     fi
 

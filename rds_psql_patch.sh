@@ -190,7 +190,7 @@ function create_param_group() {
                 --tags '[{"Key": "Name","Value": "'"$db_param_group_name"'"}]'
 
          return_value="$?"
-	      echo ""
+	     echo ""
          echo "CreateDBParamGroup ReturnValue = ${return_value}"
 	      
          if [ "${return_value}" != "0" ]; then
@@ -299,6 +299,19 @@ function db_upgrade() {
 
 	# wait until DB instance status is available #
 	wait_till_available
+
+    # check before/after upgrade version #
+    echo -e "\nINFO: Check before/after upgrade version...\n"
+    current_db_engine_version_after=$( ${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --query 'DBInstances[0].[EngineVersion]' --output text )
+    echo "current_db_engine_version_after = $current_db_engine_version_after"
+
+    # compare current engine version with next engine version #
+    if [ "${current_db_engine_version_after}" = "${next_engine_version}" ]; then
+       echo -e "\nINFO: DB instance is upgraded to ${next_engine_version}. Upgrade is successful.\n"
+    else
+       echo -e "\nERROR: DB instance is not upgraded to ${next_engine_version}. Please check upgrade and database logs for more details.\n"
+       exit 1
+    fi
 
 	echo ""
 
@@ -594,7 +607,7 @@ function run_psql_drop_repl_slot() {
                 fi
 
             else
-                echo "IMPORTANT: ${repl_slot_count} replication slot(s) Found. All replication slots MUST be dropped before proceeding with the major version upgrade."
+                echo "IMPORTANT: ${repl_slot_count} replication slot(s) found. All replication slots MUST be dropped before proceeding with the major version upgrade."
             fi
 
         else
@@ -739,13 +752,13 @@ function check_upgrade_type() {
     fi
 
     # Compare full versions for minor upgrade check
-    current_engine_version=$(echo "$current_engine_version" | tr -d '.')
-    next_engine_version=$(echo "$next_engine_version" | tr -d '.')
+    current_engine_version_1=$(echo "$current_engine_version" | tr -d '.')
+    next_engine_version_1=$(echo "$next_engine_version" | tr -d '.')
 
-    if [ "$current_engine_version" -eq "$next_engine_version" ]; then
+    if [ "$current_engine_version_1" -eq "$next_engine_version_1" ]; then
         echo -e "\nINFO: Current and target versions are identical. No upgrade required."
         exit 0
-    elif [ "$current_engine_version" -gt "$next_engine_version" ]; then
+    elif [ "$current_engine_version_1" -gt "$next_engine_version_1" ]; then
         echo -e "\nINFO: Current version is newer than target. No upgrade required."
         exit 0
     else

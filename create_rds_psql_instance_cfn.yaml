@@ -5,48 +5,53 @@ Description: Create complete RDS PostgreSQL testing environment with VPC, NAT
 Parameters:
   RDSMasterUsername:
     Type: String
-    Description: RDS Master Username
+    Description: Username for RDS master user
     NoEcho: true
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9]*$
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
 
   EnvironmentName:
     Type: String
-    Default: rds-test-env
+    Default: rds-patch-test-env
     Description: Environment name prefix for resources
 
   VpcCIDR:
     Type: String
-    Default: 10.0.1.0/16
+    Default: 10.20.0.0/16
     Description: CIDR block for VPC
 
   PublicSubnet1CIDR:
     Type: String
-    Default: 10.0.1.0/24
+    Default: 10.20.1.0/24
     Description: CIDR block for public subnet 1
 
   PrivateSubnet1CIDR:
     Type: String
-    Default: 10.0.2.0/24
+    Default: 10.20.2.0/24
     Description: CIDR block for private subnet 1
 
   PrivateSubnet2CIDR:
     Type: String
-    Default: 10.0.3.0/24
+    Default: 10.20.3.0/24
     Description: CIDR block for private subnet 2
 
   BucketNamePrefix:
     Type: String
-    Default: rds-upgrade-scripts
+    Default: rds-patch-test-scripts
     Description: Prefix for S3 bucket name
 
   LatestAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
 
-  NotificationEmail:
+  SnsEmailAddress:
     Type: String
-    Description: Email address for RDS notifications
+    Description: Email address for SNS topic subscription
     AllowedPattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
-
+    ConstraintDescription: Must be a valid email address
+  
 Resources:
   # VPC and Networking Components
   VPC:
@@ -188,13 +193,6 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: !Ref VpcCIDR
-          Description: Management access
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref VpcCIDR
-          Description: Management access
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-EC2-SG
@@ -209,18 +207,11 @@ Resources:
           FromPort: 5432
           ToPort: 5432
           SourceSecurityGroupId: !Ref EC2SecurityGroup
-          Description: DB access
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 0
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0
-          Description: Outbound access
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-RDS-SG
 
-   # SNS Topic
+  # SNS Topic
   RdsUpgradeTestSnsTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -244,13 +235,13 @@ Resources:
       Topics:
         - !Ref RdsUpgradeTestSnsTopic
 
-
   RdsUpgradeTestSnsSubscription:
     Type: AWS::SNS::Subscription
     Properties:
       TopicArn: !Ref RdsUpgradeTestSnsTopic
       Protocol: email
-      Endpoint: !Ref NotificationEmail
+      Endpoint: !Ref SnsEmailAddress
+
 
   # S3 Bucket
   S3Bucket:
@@ -349,6 +340,7 @@ Resources:
                   - secretsmanager:GetSecretValue
                 Resource:
                   - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds*
+
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -399,13 +391,13 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-DBParameterGroup
 
-  # amazonq-ignore-next-line
   RDSInstance:
     Type: AWS::RDS::DBInstance
     Properties:
+      DBInstanceIdentifier: !Sub ${EnvironmentName}-postgres
       DBInstanceClass: db.t3.micro
       Engine: postgres
-      EngineVersion: '14.9'
+      EngineVersion: '14.12'
       MasterUsername: !Ref RDSMasterUsername
       ManageMasterUserPassword: true
       DBParameterGroupName: !Ref RDSParameterGroup
@@ -425,6 +417,7 @@ Resources:
           Value: !Sub ${EnvironmentName}-RDSInstance
         - Key: UpgradeDB
           Value: Y
+
 Outputs:
   VpcId:
     Description: VPC ID

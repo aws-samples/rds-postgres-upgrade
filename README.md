@@ -153,12 +153,12 @@ This repository will guide you through setting up automation for pre-upgrade che
 3. Create SSM automation document using CFN *[create_ssm_rds_patch_automation_document.yaml]*
          Note: Modify resource names appropriately
 
-4. Identify minor or major upgrade path. Below is an example AWS CLI command to identify appropriate upgrade path for RDS PostgreSQL 14.9.
+4. Identify minor or major upgrade path. Below is an example AWS CLI command to identify appropriate upgrade path for RDS PostgreSQL 14.12.
  
       ```
             aws rds describe-db-engine-versions \
               --engine postgres \
-              --engine-version 14.9 \
+              --engine-version 14.12 \
               --query "DBEngineVersions[].ValidUpgradeTarget[].{EngineVersion:EngineVersion,IsMajorVersionUpgrade:IsMajorVersionUpgrade}" \
               --output table
 
@@ -167,9 +167,6 @@ This repository will guide you through setting up automation for pre-upgrade che
             +----------------+-------------------------+
             |  EngineVersion |  IsMajorVersionUpgrade  |
             +----------------+-------------------------+
-            |  14.10         |  False                  |
-            |  14.11         |  False                  |
-            |  14.12         |  False                  |
             |  14.13         |  False                  |
             |  14.14         |  False                  |
             |  14.15         |  False                  |
@@ -180,12 +177,13 @@ This repository will guide you through setting up automation for pre-upgrade che
             |  15.8          |  True                   |
             |  15.9          |  True                   |
             |  15.10         |  True                   |
+            |  16.3          |  True                   |
             +----------------+-------------------------+
 
             Based on the above output:
       
-                  - For version 14.9, 14.10 thru 14.15 are valid minor version upgrade paths.
-                  - For version 14.9, 15.4 thru 15.10 are valid major version upgrade paths.
+                  - For version 14.12, 14.13 thru 14.15 are valid minor version upgrade paths.
+                  - For version 14.12, 15.4 thru 16.3 are valid major version upgrade paths.
       ```
 
 5. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
@@ -299,6 +297,7 @@ Below log files will be generated in the logs directory for each option
 |---------------|---------|-------------------|
 | Pre-upgrade Execution Log | Main execution log for pre-upgrade tasks | preupgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
 | Freeze Task Log | Log of VACUUM FREEZE command execution | run_db_task_freeze-20230615-14-30-45.log |
+| Replication Slot Log | Log of replication slot operation (major upgrades only) | replication_slot_20230615-14-30-45.log |
 
 <br>
 
@@ -308,7 +307,7 @@ Below log files will be generated in the logs directory for each option
 |---------------|---------|-------------------|
 | Upgrade Execution Log | Main execution log for upgrade tasks | upgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
 | Current DB Configuration Backup | Backup of current DB configuration before upgrade | db_current_config_backup_postgres15-20230615-14-30-45.txt |
-| Replication Slot Drop Log | Log of replication slot drop operation (major upgrades only) | drop_replication_slot_20230615-14-30-45.log |
+| Replication Slot Log | Log of replication slot operation (major upgrades only) | replication_slot_20230615-14-30-45.log |
 | Extension Update Log | Log of PostgreSQL extension updates | update_db_extensions_20230615-14-30-45.log |
 | Analyze Task Log | Log of ANALYZE command execution | run_db_task_analyze-20230615-14-30-45.log |
 | Unfreeze Task Log | Log of VACUUM (unfreeze) command execution | run_db_task_unfreeze-20230615-14-30-45.log |
@@ -318,8 +317,6 @@ Below log files will be generated in the logs directory for each option
 ## Conclusion
 
 The scalable solution automates RDS for PostgreSQL pre-upgrade and upgrade tasks, reducing manual effort and potential errors. With built-in logging and optional email notifications, it provides real-time visibility and comprehensive tracking. By optionally storing logs in S3, you benefit from a cost-effective solution that ensures logs are readily available for analysis, audits, and compliance purposes.
-
-We recommend validating the solution in a non-production environment before implementing this process in production.
 
 <br>
 
@@ -346,4 +343,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
-

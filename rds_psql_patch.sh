@@ -500,14 +500,14 @@ function run_psql_drop_repl_slot() {
     echo -e "\nINFO: Execute run_psql_drop_repl_slot function...\n"
 
     # Create log file path
-    local log_file="${LOGS_DIR}/${current_db_instance_id}/drop_replication_slot_${DATE_TIME}.log"
+    local log_file="${LOGS_DIR}/${current_db_instance_id}/replication_slot_${DATE_TIME}.log"
 
     # Ensure log directory exists
     mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
 
     {
         echo "================================================================"
-        echo "Replication Slot Drop Operation Log - Started at $(date)"
+        echo "Replication Slot Operation Log - Started at $(date)"
         echo "================================================================"
         echo "Database Instance: ${current_db_instance_id}"
         echo "Log File: ${log_file}"
@@ -564,7 +564,7 @@ function run_psql_drop_repl_slot() {
                     return 1
                 fi
 
-                echo "Drop operation result:"
+                echo "Replication Slot operation result:"
                 echo "----------------------------------------"
                 echo "${drop_result}"
                 echo "----------------------------------------"
@@ -590,11 +590,11 @@ function run_psql_drop_repl_slot() {
                 if [ "${final_count}" -eq 0 ]; then
                     echo "SUCCESS: All replication slots were successfully dropped."
                 else
-                    echo "ERROR: ${final_count}  replication slots still exist. Upgrade cannot proceed until they are dropped."
+                    echo "ERROR: ${final_count} replication slots still exist. Upgrade cannot proceed until they are dropped."
                 fi
 
             else
-                echo "ERROR: ${final_count} replication slot(s) detected. All replication slots MUST be dropped before proceeding with the major version upgrade to ensure success."
+                echo "IMPORTANT: ${repl_slot_count} replication slot(s) Found. All replication slots MUST be dropped before proceeding with the major version upgrade."
             fi
 
         else

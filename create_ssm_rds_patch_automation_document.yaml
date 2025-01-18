@@ -119,70 +119,43 @@ Resources:
                   - |
                     #!/bin/bash
                     set -euo pipefail
-                    # e: exits on error
-                    # u: exits on undefined variables
-                    # o pipefail: exits if any command in a pipe fails
-
-
-                    # Debug information
-                    # echo "Current user: $(whoami)"
-                    # echo "Home directory: $HOME"
 
                     # Setup environment
                     export AWS_REGION="{{ global:REGION }}"
                     export AWS_DEFAULT_REGION="{{ global:REGION }}"
 
-                    check_aws_cli_version() {
-                        # Check if aws command exists
-                        if ! command -v aws &> /dev/null; then
-                            echo "ERROR: AWS CLI is not installed"
-                            exit 1
-                        fi
-
-                        # Get version string
-                        VERSION=$(aws --version 2>&1)
-                        
-                        # Extract major version number
-                        if [[ $VERSION =~ aws-cli/([0-9]+)\. ]]; then
-                            MAJOR_VERSION="${BASH_REMATCH[1]}"
-                            
-                            if [ "$MAJOR_VERSION" -lt 2 ]; then
-                                echo "ERROR: AWS CLI version 2 or greater is required. Current version: $VERSION"
-                                exit 1
-                            else
-                                echo "INFO: AWS CLI version check passed: $VERSION"
-                            fi
-                        else
-                            echo "ERROR: Could not determine AWS CLI version from: $VERSION"
-                            exit 1
-                        fi
-                    }
-
-                    # Run the version check
-                    check_aws_cli_version
-
-                    # Create logs directory with timestamp suffix for master log
+                    # Create logs directory with timestamp suffix
                     TIMESTAMP=$(date '+%Y%m%d-%H-%M-%S')
-                    MASTER_LOG="{{ ScriptsDirOnEC2 }}/logs/upgrade_master-${TIMESTAMP}.log"
-                    mkdir -p {{ ScriptsDirOnEC2 }}/logs
+                    LOGS_DIR="{{ ScriptsDirOnEC2 }}/logs"
+                    MASTER_LOG="${LOGS_DIR}/upgrade_master-${TIMESTAMP}.log"
+                    mkdir -p "${LOGS_DIR}"
+
+                    # Store instance list in a file to ensure consistency
+                    INSTANCE_LIST_FILE="${LOGS_DIR}/instance_list.txt"
 
                     log_message() {
-                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "${MASTER_LOG}"
+                        local instance="$1"
+                        local message="$2"
+                        local log_file="$3"
+                        local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+                        echo "[${timestamp}] [${instance}] ${message}" | tee -a "${log_file}"
                     }
 
                     export TAG_KEY="{{ DBTagKey }}"
                     export TAG_VALUE="{{ DBTagValue }}"
-                    INSTANCES=$(aws rds describe-db-instances --filters "Name=engine,Values=postgres" --output json | \
+                    aws rds describe-db-instances --filters "Name=engine,Values=postgres" --output json | \
                       jq -r --arg key "$TAG_KEY" --arg value "$TAG_VALUE" \
-                        '.DBInstances[] | select(.TagList[] | select(.Key==$key and .Value==$value)) | .DBInstanceIdentifier'
-                    )
-                    log_message "INFO: Found instances to upgrade: ${INSTANCES}"
+                        '.DBInstances[] | select(.TagList[] | select(.Key==$key and .Value==$value)) | .DBInstanceIdentifier' \
+                      > "${INSTANCE_LIST_FILE}"
+
+                    INSTANCES=$(cat "${INSTANCE_LIST_FILE}")
+                    log_message "MASTER" "Found instances to upgrade: ${INSTANCES}" "${MASTER_LOG}"
 
                     COUNT=0
                     declare -a PIDS=()
 
                     cleanup() {
-                      log_message "INFO: Cleaning up background processes..."
+                      log_message "MASTER" "Cleaning up background processes..." "${MASTER_LOG}"
                       for pid in "${PIDS[@]}"; do
                         kill -9 $pid 2>/dev/null || true
                       done
@@ -191,30 +164,31 @@ Resources:
 
                     trap cleanup SIGINT SIGTERM
 
-                    export SCRIPTS_DIR={{ ScriptsDirOnEC2 }}
-                    export S3_BUCKET_PATCH_LOGS={{ S3BucketName }}
-                    export SNS_TOPIC_ARN_EMAIL={{ SnsTopicArnEmail }}
+                    export SCRIPTS_DIR="{{ ScriptsDirOnEC2 }}"
+                    export S3_BUCKET_PATCH_LOGS="{{ S3BucketName }}"
+                    export SNS_TOPIC_ARN_EMAIL="{{ SnsTopicArnEmail }}"
 
-                    for INSTANCE in $INSTANCES; do
-                      # Create instance-specific log directory
-                      INSTANCE_LOG_DIR="{{ ScriptsDirOnEC2 }}/logs/${INSTANCE}"
+                    while IFS= read -r INSTANCE || [[ -n "$INSTANCE" ]]; do
+                      INSTANCE_LOG_DIR="${LOGS_DIR}/${INSTANCE}"
                       mkdir -p "${INSTANCE_LOG_DIR}"
                       INSTANCE_LOG="${INSTANCE_LOG_DIR}/upgrade-${TIMESTAMP}.log"
 
                       (
-                        cd {{ ScriptsDirOnEC2 }}
-                        log_message "INFO: Starting upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
-                        if ./rds_psql_patch.sh "$INSTANCE" {{ TargetEngineVersion }} {{ RunPreUpgradeTasks }} >> "$INSTANCE_LOG" 2>&1; then
-                          log_message "INFO: Completed upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
+                        cd "${SCRIPTS_DIR}"
+                        log_message "${INSTANCE}" "Starting upgrade process" "${INSTANCE_LOG}"
+                        if ./rds_psql_patch.sh "${INSTANCE}" "{{ TargetEngineVersion }}" "{{ RunPreUpgradeTasks }}" >> "${INSTANCE_LOG}" 2>&1; then
+                          log_message "${INSTANCE}" "Upgrade completed successfully" "${INSTANCE_LOG}"
+                          echo "SUCCESS" > "${INSTANCE_LOG_DIR}/status"
                         else
-                          log_message "ERROR: Failed upgrade for instance: ${INSTANCE}" >> "$INSTANCE_LOG"
+                          log_message "${INSTANCE}" "Upgrade failed" "${INSTANCE_LOG}"
+                          echo "FAILED" > "${INSTANCE_LOG_DIR}/status"
                           exit 1
                         fi
                       ) &
                       PIDS+=($!)
                       COUNT=$((COUNT+1))
-                      log_message "INFO: Started upgrade process for ${INSTANCE} with PID ${PIDS[-1]}"
-                    done
+                      log_message "MASTER" "Started upgrade process for ${INSTANCE} with PID ${PIDS[-1]}" "${MASTER_LOG}"
+                    done < "${INSTANCE_LIST_FILE}"
 
                     EXIT_STATUS=0
                     FAILED_INSTANCES=""
@@ -222,39 +196,51 @@ Resources:
                     for pid in "${PIDS[@]}"; do
                       if ! wait $pid; then
                         EXIT_STATUS=1
-                        FAILED_INSTANCES="${FAILED_INSTANCES} $(ps -p $pid -o args= 2>/dev/null | grep -o 'instance_[^ ]*' || echo 'unknown')"
                       fi
                     done
 
-                    log_message "INFO: Upgrade initiated for $COUNT instances"
+                    log_message "MASTER" "Upgrade initiated for $COUNT instances" "${MASTER_LOG}"
 
-                    # Logging summary for each instance #
-                    for INSTANCE in $INSTANCES; do
+                    # Logging summary for each instance
+                    while IFS= read -r INSTANCE || [[ -n "$INSTANCE" ]]; do
+                      INSTANCE_LOG_DIR="${LOGS_DIR}/${INSTANCE}"
                       INSTANCE_LOG="${INSTANCE_LOG_DIR}/upgrade-${TIMESTAMP}.log"
-                      if [ -f "$INSTANCE_LOG" ]; then
-                        log_message ""
-                        log_message "===== Log summary for instance: ${INSTANCE} ====="
+                      
+                      if [ -f "${INSTANCE_LOG}" ]; then
+                        log_message "MASTER" "" "${MASTER_LOG}"
+                        log_message "MASTER" "===== Log summary for instance: ${INSTANCE} =====" "${MASTER_LOG}"
                         while IFS= read -r line; do
-                            log_message "$line"
-                            done < <(egrep "INFO|ERROR|IMPORTANT|WARN" "$INSTANCE_LOG" | egrep -v -i "vacuuming|pages|scanned|analyzing" || true)
-                            log_message "===== End of log summary for instance: ${INSTANCE} ====="
-                            log_message ""
-                      else
-                        log_message ""
-                        log_message "WARNING: Log file not found for ${INSTANCE}: ${INSTANCE_LOG}"
-                        log_message ""
-                      fi
-                    done
+                          log_message "MASTER" "$line" "${MASTER_LOG}"
+                        done < <(egrep "INFO|ERROR|IMPORTANT|WARN" "${INSTANCE_LOG}" | egrep -v -i "vacuuming|pages|scanned|analyzing" || true)
+                        log_message "MASTER" "===== End of log summary for instance: ${INSTANCE} =====" "${MASTER_LOG}"
+                        log_message "MASTER" "" "${MASTER_LOG}"
 
-                    if [ $EXIT_STATUS -eq 0 ]; then
-                      log_message "INFO: All upgrades completed successfully"
+                        # Check instance status
+                        if [ -f "${INSTANCE_LOG_DIR}/status" ]; then
+                          STATUS=$(cat "${INSTANCE_LOG_DIR}/status")
+                          if [ "${STATUS}" = "FAILED" ]; then
+                            FAILED_INSTANCES="${FAILED_INSTANCES} ${INSTANCE}"
+                          fi
+                        else
+                          FAILED_INSTANCES="${FAILED_INSTANCES} ${INSTANCE}"
+                        fi
+                      else
+                        log_message "MASTER" "" "${MASTER_LOG}"
+                        log_message "MASTER" "WARNING: Log file not found for ${INSTANCE}: ${INSTANCE_LOG}" "${MASTER_LOG}"
+                        log_message "MASTER" "" "${MASTER_LOG}"
+                        FAILED_INSTANCES="${FAILED_INSTANCES} ${INSTANCE}"
+                      fi
+                    done < "${INSTANCE_LIST_FILE}"
+
+                    if [ $EXIT_STATUS -eq 0 ] && [ -z "${FAILED_INSTANCES}" ]; then
+                      log_message "MASTER" "INFO: All upgrades completed successfully" "${MASTER_LOG}"
                     else
-                      log_message "ERROR: Some upgrades failed. Failed instances:${FAILED_INSTANCES}"
+                      log_message "MASTER" "ERROR: Some upgrades failed. Failed instances:${FAILED_INSTANCES}" "${MASTER_LOG}"
                     fi
 
                     if [ -n "{{ S3BucketName }}" ]; then
-                      log_message "INFO: Uploading logs to S3..."
-                      aws s3 cp {{ ScriptsDirOnEC2 }}/logs s3://{{ S3BucketName }}/logs/$(date '+%Y-%m-%d')/ --recursive
+                      log_message "MASTER" "INFO: Uploading logs to S3..." "${MASTER_LOG}"
+                      aws s3 cp "${LOGS_DIR}" "s3://{{ S3BucketName }}/logs/$(date '+%Y-%m-%d')/" --recursive
                     fi
 
                     exit $EXIT_STATUS

@@ -86,9 +86,8 @@ This repository will guide you through setting up automation for pre-upgrade che
       4. OS maintenance (pending maintenance)
       5. Database version upgrade
       6. PostgreSQL extensions update
-      7. Run analyze database
-      8. Vacuum unfreeze.
-
+      7. Run analyze database.
+      
 <br>
 
 <details>
@@ -310,7 +309,6 @@ Below log files will be generated in the logs directory for each option
 | Replication Slot Log | Log of replication slot operation (major upgrades only) | replication_slot_20230615-14-30-45.log |
 | Extension Update Log | Log of PostgreSQL extension updates | update_db_extensions_20230615-14-30-45.log |
 | Analyze Task Log | Log of ANALYZE command execution | run_db_task_analyze-20230615-14-30-45.log |
-| Unfreeze Task Log | Log of VACUUM (unfreeze) command execution | run_db_task_unfreeze-20230615-14-30-45.log |
 
 <br>
 

@@ -607,7 +607,7 @@ function run_psql_drop_repl_slot() {
                 fi
 
             else
-                echo "IMPORTANT: ${repl_slot_count} replication slot(s) found. All replication slots MUST be dropped before proceeding with the major version upgrade."
+                echo "IMPORTANT: ${repl_slot_count} replication slot(s) found. All replication slots MUST be dropped before proceeding with major version upgrade."
             fi
 
         else
@@ -968,7 +968,7 @@ if [ "${current_engine_type}" = "postgres" ]; then
         # call function to take DB snapshot/backup #
         db_snapshot
 
-        #call function to run UnFreeze in database #
+        #call function to run Freeze in database #
         run_psql_command "FREEZE"
 
     else # run_pre_upg_tasks = UPGRADE; perform upgrade/patching tasks
@@ -1014,8 +1014,8 @@ if [ "${current_engine_type}" = "postgres" ]; then
         # call function to run ANALYZE in database #
         run_psql_command "ANALYZE"
 
-        # call function to run UnFreeze (vacuum) in database #
-        run_psql_command "UNFREEZE"
+        # call function to run UnFreeze (vacuum) in database # not needed
+        #run_psql_command "UNFREEZE"
 
     fi
 

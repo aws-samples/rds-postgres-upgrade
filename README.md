@@ -294,6 +294,7 @@ Below log files will be generated in the logs directory for each option
 
 | Log File Type | Purpose | Sample File Name |
 |---------------|---------|-------------------|
+| Master Log | Master log file that will have log summary (highlights) for each database pre-upgrade activity | upgrade_master-20250118-02-04-15.log |
 | Pre-upgrade Execution Log | Main execution log for pre-upgrade tasks | preupgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
 | Freeze Task Log | Log of VACUUM FREEZE command execution | run_db_task_freeze-20230615-14-30-45.log |
 | Replication Slot Log | Log of replication slot operation (major upgrades only) | replication_slot_20230615-14-30-45.log |
@@ -304,6 +305,7 @@ Below log files will be generated in the logs directory for each option
 
 | Log File Type | Purpose | Sample File Name |
 |---------------|---------|-------------------|
+| Master Log | Master log file that will have log summary (highlights) for each database upgrade activity | upgrade_master-20250118-02-04-15.log |
 | Upgrade Execution Log | Main execution log for upgrade tasks | upgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
 | Current DB Configuration Backup | Backup of current DB configuration before upgrade | db_current_config_backup_postgres15-20230615-14-30-45.txt |
 | Replication Slot Log | Log of replication slot operation (major upgrades only) | replication_slot_20230615-14-30-45.log |

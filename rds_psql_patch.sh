@@ -608,6 +608,10 @@ function run_psql_drop_repl_slot() {
 
             else
                 echo "IMPORTANT: ${repl_slot_count} replication slot(s) found. All replication slots MUST be dropped before proceeding with major version upgrade."
+                echo "INFO: To manually drop replication slot(s), use this command in each database priot to MAJOR version upgrade:"
+                echo "INFO  SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN (SELECT slot_name FROM pg_replication_slots);"
+                echo "INFO: Other option is to set this variable "db_drop_replication_slot" to "Y" prior to running the MAJOR version UPGRADE; using this option,"
+                echo "INFO: the script will drop replication slot(s) as part of the MAJOR version UPGRADE process."
             fi
 
         else

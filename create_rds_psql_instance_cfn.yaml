@@ -193,6 +193,13 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: !Ref VpcCIDR
+          Description: Management access
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref VpcCIDR
+          Description: Management access
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-EC2-SG
@@ -207,6 +214,13 @@ Resources:
           FromPort: 5432
           ToPort: 5432
           SourceSecurityGroupId: !Ref EC2SecurityGroup
+          Description: DB access
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+          Description: Outbound access
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-RDS-SG

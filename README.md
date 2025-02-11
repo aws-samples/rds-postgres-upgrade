@@ -306,14 +306,16 @@ To perform end-to-end testing of this process using AWS System Manager, perform 
     
 5. Create maintenance database user account in RDS PostgreSQL instance like below.
 
-    ```
+      ```
             CREATE USER rds_maintenance_user WITH PASSWORD 'xxxxxxxxxxxxxxx';
             GRANT rds_superuser TO rds_maintenance_user;
-  ```
+      ```
 
 6. Execute automation document from AWS Systems Manager console (as per Step 4 of the section "Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager").
 
-Note: To create a replication slot in an RDS PostgreSQL instance, set rds.logical_replication=1 and reboot the instance. Then, use the command like "SELECT pg_create_logical_replication_slot('slot_psql_patch_test','test_decoding');" to create a replication slot.
+Note: 
+1. To create a replication slot in an RDS PostgreSQL instance, set rds.logical_replication=1 in the RDS instance parameter file and reboot the instance.
+2. Then, use the command like "SELECT pg_create_logical_replication_slot('slot_psql_patch_test','test_decoding');" to create a replication slot.
 
 <br>
 

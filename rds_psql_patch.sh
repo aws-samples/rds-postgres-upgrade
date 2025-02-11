@@ -82,7 +82,11 @@ PSQL_BIN=$(which psql)
 # Environment Variables - Misc. - Manual #
 db_snapshot_required="Y"  # set this to Y if manual snapshot is required #
 db_parameter_modify="N"  # set this to Y if security and replication related parameters needs to be enabled; if not set it to N. Used in create_param_group function #
-db_drop_replication_slot="N"  # set this to Y if replication slots needs to be dropped automatically by this process, as part of major version upgrade #
+db_drop_replication_slot="Y"  # set this to Y if replication slots needs to be dropped automatically by this process, as part of major version upgrade #
+rds_secret_tag_name="rds-maintenance-user-secret"
+rds_secret_key_value1="maintenance-user"
+rds_secret_key_value2="password"
+
 DATE_TIME=$(date +'%Y%m%d-%H-%M-%S')
 
 ##-------------------------------------------------------------------------------------
@@ -392,14 +396,51 @@ function db_pending_maint() {
 
 # function to retrieve DB creds from secret manager #
 function get_rds_creds() {
+    echo -e "\nINFO: Execute get_rds_creds function...\n"
+    
+    # Get instance information and ARN
+    rds_instance_info=$(${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --output json)
+    db_arn=$(echo ${rds_instance_info} | jq -r '.DBInstances[0].DBInstanceArn')
+    
+    # Get secret name from RDS tags
+    tags_info=$(${AWS_CLI} rds list-tags-for-resource --resource-name ${db_arn} --output json)
+    secret_name=$(echo ${tags_info} | jq -r --arg tag_name "${rds_secret_tag_name}" '.TagList[] | select(.Key==$tag_name).Value')
+    
+    echo "secret_name = ${secret_name}"
+    echo "rds_secret_tag_name = ${rds_secret_tag_name}"
+    echo "secret_name = ${secret_name}"
 
-   echo -e "\nINFO: Execute get_rds_creds function...\n"
-   SECRET_VALUE=$(${AWS_CLI} secretsmanager get-secret-value --secret-id ${current_db_secret_arn} --query SecretString --output text)
-   db_user2=$(echo $SECRET_VALUE | jq -r '.password')
-   #echo "db_user2 = ${db_user2}"
-   export PGPASSWORD="${db_user2}"
+    if [ -z "${secret_name}" ]; then
+        echo "ERROR: Could not find secret name in RDS tags"
+        return 1
+    fi
 
+    # Get secret value
+    SECRET_VALUE=$(${AWS_CLI} secretsmanager get-secret-value --secret-id ${secret_name} --query SecretString --output text)
+    
+    if [ -z "${SECRET_VALUE}" ]; then
+        echo "ERROR: Could not retrieve secret value"
+        return 1
+    fi
+    
+    # Extract username and password
+    db_user1=$(echo $SECRET_VALUE | jq -r --arg key1 "${rds_secret_key_value1}" '.[$key1]')
+    db_user2=$(echo $SECRET_VALUE | jq -r --arg key2 "${rds_secret_key_value2}" '.[$key2]')
+    
+    echo "db user name = ${db_user1}"
+
+    if [ -z "${db_user1}" ] || [ -z "${db_user2}" ]; then
+        echo "ERROR: Could not extract username or password from secret"
+        return 1
+    fi
+    
+    export PGPASSWORD="${db_user2}"
+    echo "INFO: Successfully retrieved database credentials"
+    echo ""
+    
+    return 0
 }
+
 ##-------------------------------------------------------------------------------------
 
 # run analyze in PSQL database #
@@ -533,7 +574,10 @@ function run_psql_drop_repl_slot() {
         # Validate DB credentials
         if [[ -z "${db_user1}" || -z "${db_user2}" ]]; then
             echo "ERROR: Database credentials NOT found."
-            echo "ERROR: MAJOR version upgrade will NOT run if there are one or more replication slots."
+            #echo "ERROR: MAJOR version upgrade will NOT run if there are one or more replication slots."
+            echo "ERROR: [Replication Slots] Check if the instance has replication slots. Major Version upgrade will fail if there are one or more replication slots."
+            echo "ERROR: [Extension check] Check if there are extensions on older version which may not be compatible with target version. Major version will fail if there are extensions that are not compatible with target version."
+
             echo "----------------------------------------------------------------"
             return 1
         fi
@@ -884,14 +928,12 @@ function get_db_info() {
      db_name=$(echo $instance_info | jq -r '.DBInstances[0].DBName')
      db_endpoint=$(echo $instance_info | jq -r '.DBInstances[0].Endpoint.Address')
      db_port=$(echo $instance_info | jq -r '.DBInstances[0].Endpoint.Port')
-     db_user1=$(echo $instance_info | jq -r '.DBInstances[0].MasterUsername')  # master account #
      current_db_status=$(echo $instance_info | jq -r '.DBInstances[0].DBInstanceStatus')
      current_engine_type=$(echo $instance_info | jq -r '.DBInstances[0].Engine')
      current_engine_version=$(echo $instance_info | jq -r '.DBInstances[0].EngineVersion')
      current_engine_version_family=$(echo $instance_info | jq -r '.DBInstances[0].EngineVersion | split(".")[0:2] | join(".")')
      current_engine_version_family=$(echo "${current_engine_version_family}" | cut -d. -f1)
      current_db_param_group=$(echo $instance_info | jq -r '.DBInstances[0].DBParameterGroups[0].DBParameterGroupName')
-     current_db_secret_arn=$(echo $instance_info | jq -r '.DBInstances[0].MasterUserSecret.SecretArn')
 
      echo -e "\nINFO: Upgrade/Patching steps begin...\n"
      echo "current_db_instance_id = $current_db_instance_id"
@@ -903,11 +945,9 @@ function get_db_info() {
      echo "db_snapshot_required = $db_snapshot_required"
      echo "db_parameter_modify = $db_parameter_modify"
      echo "run_pre_upg_tasks = $run_pre_upg_tasks"
-     echo "db_user1 = ${db_user1}"
      echo "db_name = ${db_name}"
      echo "db_endpoint = ${db_endpoint}"
      echo "db_port = ${db_port}"
-     echo "current_db_secret_arn = ${current_db_secret_arn}"
      echo "S3_BUCKET_PATCH_LOGS = ${S3_BUCKET_PATCH_LOGS}"
      echo "SNS_TOPIC_ARN_EMAIL = ${SNS_TOPIC_ARN_EMAIL}"
 
@@ -969,11 +1009,11 @@ if [ "${current_engine_type}" = "postgres" ]; then
             run_psql_drop_repl_slot
         fi
 
-        # call function to take DB snapshot/backup #
-        db_snapshot
-
         #call function to run Freeze in database #
         run_psql_command "FREEZE"
+
+        # call function to take DB snapshot/backup #
+        db_snapshot
 
     else # run_pre_upg_tasks = UPGRADE; perform upgrade/patching tasks
 

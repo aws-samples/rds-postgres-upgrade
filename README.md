@@ -149,10 +149,14 @@ This repository will guide you through setting up automation for pre-upgrade che
 
 2. Upload unix shell script *[rds_psql_patch.sh]* from this repo to S3 bucket
 
-3. Create SSM automation document using CFN *[create_ssm_rds_patch_automation_document.yaml]*
+3. Add a tag to RDS PostgreSQL instance and then create a secret to store database maintenance database user credentials. Sample commands are listed below in the "Testing" section.
+
+4. Create a database user account that can create/drop replication slots, run analyze and vacuum commands, and upgrade pg extensions. Sample commands are listed below in the "Testing" section.
+
+5. Create SSM automation document using CFN *[create_ssm_rds_patch_automation_document.yaml]*
          Note: Modify resource names appropriately
 
-4. Identify minor or major upgrade path. Below is an example AWS CLI command to identify appropriate upgrade path for RDS PostgreSQL 14.12.
+6. Identify minor or major upgrade path. Below is an example AWS CLI command to identify appropriate upgrade path for RDS PostgreSQL 14.12.
  
       ```
             aws rds describe-db-engine-versions \
@@ -185,7 +189,7 @@ This repository will guide you through setting up automation for pre-upgrade che
                   - For version 14.12, 15.4 thru 16.3 are valid major version upgrade paths.
       ```
 
-5. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
+7. Execute SSM automation document "RDSPostgreSQLFleetUpgrade"
       - Identify major or minor version upgrade path as shown in the previous section
       - Provide appropriate input parameters. See below screenshots.
             -- Input parameters in SSM console
@@ -280,7 +284,36 @@ To perform end-to-end testing of this process using AWS System Manager, perform 
 
 3. Upload RDS patch shell script [rds_psql_patch.sh] to S3 bucket created in Step 1 above.
 
-4. Execute automation document from AWS Systems Manager console (as per Step 4 of the section "Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager").
+4. Add RDS secret tag to RDS PostgreSQL instance using AWS CLI command like below.
+
+    ```
+      - Expected RDS tags for secret
+            - Tag Name: rds-maintenance-user-secret
+            - Secret Name: rds-<DB instance ID>-maintenance-user-secret            
+            - DB Maintenance User Name: rds_maintenance_user
+
+      - Sample AWS CLI command to add secret tag to an RDS PostgreSQL instance
+      aws rds add-tags-to-resource \
+            --resource-name arn:aws:rds:<AWS-REGION>:<AWS-ACCOUNT-NUMBER>:db:<DB instance ID> \
+            --tags Key=rds-maintenance-user-secret,Value=<DB instance ID>-maintenance-user-secret
+
+      - Sample AWS CLI command to create secret
+      aws secretsmanager create-secret \
+            --name "<DB instance ID>-maintenance-user-secret" \
+            --description "Maintenance user credentials for PostgreSQL RDS instance" \
+            --secret-string "{\"maintenance-user\":\"rds_maintenance_user\",\"password\":\"xxxxxxxxxxxxxxx\"}"
+    ```
+    
+5. Create maintenance database user account in RDS PostgreSQL instance like below.
+
+    ```
+            CREATE USER rds_maintenance_user WITH PASSWORD 'xxxxxxxxxxxxxxx';
+            GRANT rds_superuser TO rds_maintenance_user;
+  ```
+
+6. Execute automation document from AWS Systems Manager console (as per Step 4 of the section "Upgrade fleet of RDS PostgreSQL instances using AWS Systems Manager").
+
+Note: To create a replication slot in an RDS PostgreSQL instance, set rds.logical_replication=1 and reboot the instance. Then, use the command like "SELECT pg_create_logical_replication_slot('slot_psql_patch_test','test_decoding');" to create a replication slot.
 
 <br>
 

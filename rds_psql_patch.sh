@@ -80,12 +80,12 @@ AWS_CLI=$(which aws)
 PSQL_BIN=$(which psql)
 
 # Environment Variables - Misc. - Manual #
-db_snapshot_required="Y"  # set this to Y if manual snapshot is required #
+db_snapshot_required="Y"  # set this to Y if manual snapshot is required. #
 db_parameter_modify="N"  # set this to Y if security and replication related parameters needs to be enabled; if not set it to N. Used in create_param_group function #
-db_drop_replication_slot="Y"  # set this to Y if replication slots needs to be dropped automatically by this process, as part of major version upgrade #
+db_drop_replication_slot="N"  # set this to Y if replication slots needs to be dropped automatically by this process, as part of major version upgrade #
 rds_secret_tag_name="rds-maintenance-user-secret"
-rds_secret_key_value1="maintenance-user"
-rds_secret_key_value2="password"
+rds_secret_key_username="username"
+rds_secret_key_password="password"
 
 DATE_TIME=$(date +'%Y%m%d-%H-%M-%S')
 
@@ -406,7 +406,6 @@ function get_rds_creds() {
     tags_info=$(${AWS_CLI} rds list-tags-for-resource --resource-name ${db_arn} --output json)
     secret_name=$(echo ${tags_info} | jq -r --arg tag_name "${rds_secret_tag_name}" '.TagList[] | select(.Key==$tag_name).Value')
     
-    echo "secret_name = ${secret_name}"
     echo "rds_secret_tag_name = ${rds_secret_tag_name}"
     echo "secret_name = ${secret_name}"
 
@@ -424,17 +423,17 @@ function get_rds_creds() {
     fi
     
     # Extract username and password
-    db_user1=$(echo $SECRET_VALUE | jq -r --arg key1 "${rds_secret_key_value1}" '.[$key1]')
-    db_user2=$(echo $SECRET_VALUE | jq -r --arg key2 "${rds_secret_key_value2}" '.[$key2]')
+    db_username=$(echo $SECRET_VALUE | jq -r --arg key1 "${rds_secret_key_username}" '.[$key1]')
+    db_password=$(echo $SECRET_VALUE | jq -r --arg key2 "${rds_secret_key_password}" '.[$key2]')
     
-    echo "db user name = ${db_user1}"
+    echo "db user name = ${db_username}"
 
-    if [ -z "${db_user1}" ] || [ -z "${db_user2}" ]; then
+    if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
         echo "ERROR: Could not extract username or password from secret"
         return 1
     fi
-    
-    export PGPASSWORD="${db_user2}"
+
+    export PGPASSWORD="${db_password}"
     echo "INFO: Successfully retrieved database credentials"
     echo ""
     
@@ -474,7 +473,7 @@ function run_psql_command() {
         get_rds_creds
 
         # Validate DB credentials
-        if [[ -z "${db_user1}" || -z "${db_user2}" ]]; then
+        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
             echo "WARNING: Database credentials NOT found. Command ${1} will NOT run."
             echo "----------------------------------------------------------------"
             return 1
@@ -483,8 +482,9 @@ function run_psql_command() {
 
         # Test database connection
         echo "INFO: Testing database connection..."
-        if ! "${PSQL_BIN}" -U "${db_user1}" -h "${db_endpoint}" -p "${db_port}" \
-            -d "${db_name}" -c '\q' >/dev/null 2>&1
+        if ! "${PSQL_BIN}" -U "${db_username}" -h "${db_endpoint}" -p "${db_port}" \
+            -d "${db_name}" -c '\q'
+            #-d "${db_name}" -c '\q' >/dev/null 2>&1
         then
             echo "ERROR: Failed to connect to database"
             echo "----------------------------------------------------------------"
@@ -520,7 +520,7 @@ function run_psql_command() {
         echo "Command execution started at: $(date)"
         
         # Execute PostgreSQL command
-        if ! "${PSQL_BIN}" -U "${db_user1}" -h "${db_endpoint}" -p "${db_port}" \
+        if ! "${PSQL_BIN}" -U "${db_username}" -h "${db_endpoint}" -p "${db_port}" \
             -d "${db_name}" -a -c "\timing on" -c "${cmd}" 2>&1
         then
             cmd_status=$?
@@ -572,7 +572,7 @@ function run_psql_drop_repl_slot() {
         get_rds_creds
 
         # Validate DB credentials
-        if [[ -z "${db_user1}" || -z "${db_user2}" ]]; then
+        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
             echo "ERROR: Database credentials NOT found."
             #echo "ERROR: MAJOR version upgrade will NOT run if there are one or more replication slots."
             echo "ERROR: [Replication Slots] Check if the instance has replication slots. Major Version upgrade will fail if there are one or more replication slots."
@@ -585,7 +585,7 @@ function run_psql_drop_repl_slot() {
 
         # Check for existing replication slots
         echo "INFO: Checking for existing replication slots..."
-        repl_slot_count=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots" 2>&1)
+        repl_slot_count=$(${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots" 2>&1)
         
         if [ $? -ne 0 ]; then
             echo "ERROR: Failed to query replication slots:"
@@ -604,7 +604,7 @@ function run_psql_drop_repl_slot() {
             echo "INFO: Capturing current replication slot details..."
             echo "Current replication slots:"
             echo "----------------------------------------"
-            ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
+            ${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" \
                 -c "SELECT slot_name, plugin, slot_type, database, active, xmin FROM pg_replication_slots"
             echo "----------------------------------------"
 
@@ -612,7 +612,7 @@ function run_psql_drop_repl_slot() {
 
                 # Drop replication slots
                 echo "INFO: Dropping replication slots..."
-                drop_result=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
+                drop_result=$(${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" \
                     -c "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN (SELECT slot_name FROM pg_replication_slots)" 2>&1)
                 
                 if [ $? -ne 0 ]; then
@@ -621,21 +621,19 @@ function run_psql_drop_repl_slot() {
                     return 1
                 fi
 
-                echo "Replication Slot operation result:"
-                echo "----------------------------------------"
-                echo "${drop_result}"
+                echo "INFO: Replication Slot operation result: ${drop_result}"
                 echo "----------------------------------------"
 
                 # Verify slots were dropped
                 echo "INFO: Verifying replication slots after drop operation..."
                 echo "Remaining replication slots:"
                 echo "----------------------------------------"
-                ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" \
+                ${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" \
                     -c "SELECT slot_name, plugin, slot_type, database, active, xmin FROM pg_replication_slots"
                 echo "----------------------------------------"
 
                 # Final count verification
-                final_count=$(${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots")
+                final_count=$(${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots")
                 
                 if [ $? -ne 0 ]; then
                     echo "ERROR: Failed to get final replication slot count"
@@ -846,14 +844,14 @@ function update_extensions() {
         get_rds_creds
 
         # Check if DB credentials exist
-        if [[ -z "${db_user1}" || -z "${db_user2}" ]]; then
+        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
             echo "ERROR: Database credentials not found in secret manager"
             return 1
         fi
 
         # Connect to the PostgreSQL database
         echo "INFO: Testing database connection..."
-        if ! ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -p "${db_port}" -d "${db_name}" -c '\q' >/dev/null 2>&1; then
+        if ! ${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -p "${db_port}" -d "${db_name}" -c '\q' >/dev/null 2>&1; then
             echo "ERROR: Failed to connect to the PostgreSQL database."
             return 1
         fi
@@ -861,7 +859,7 @@ function update_extensions() {
 
         # Update extensions using a PL/pgSQL anonymous code block
         echo -e "\nINFO: Starting extension updates..."
-        ${PSQL_BIN} -U "${db_user1}" -h "${db_endpoint}" -p "${db_port}" -d "${db_name}" <<EOF
+        ${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -p "${db_port}" -d "${db_name}" <<EOF
             \timing on
             
             SELECT current_timestamp AS "Start Time";
@@ -944,6 +942,7 @@ function get_db_info() {
      echo "current_db_param_group = $current_db_param_group"
      echo "db_snapshot_required = $db_snapshot_required"
      echo "db_parameter_modify = $db_parameter_modify"
+     echo "db_drop_replication_slot = $db_drop_replication_slot"
      echo "run_pre_upg_tasks = $run_pre_upg_tasks"
      echo "db_name = ${db_name}"
      echo "db_endpoint = ${db_endpoint}"

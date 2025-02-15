@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create RDS PostgreSQL instance with parameter group
+
+Parameters:
+  RDSMasterUsername:
+    Type: String
+    Description: Username for RDS master user
+    NoEcho: true
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9]*$
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
+
+  EnvironmentName:
+    Type: String
+    Default: rds-patch-test-env
+    Description: Environment name prefix for resources
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where RDS will be deployed
+
+  DBSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: First subnet ID for RDS DB subnet group
+
+  DBSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: Second subnet ID for RDS DB subnet group
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    Description: Database instance class
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+      - db.t3.large
+
+  DBName:
+    Type: String
+    Default: testdb
+    Description: Database name
+
+Resources:
+
+  RDSParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Family: postgres14
+      Description: RDS PostgreSQL parameter group
+      Parameters:
+        rds.force_ssl: 1
+        rds.logical_replication: 1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DBParameterGroup
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for RDS instance
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-RDS-SG
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: RDS-Patch-Testing
+        - Key: CreatedBy
+          Value: CloudFormation
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS instance
+      SubnetIds:
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DB-subnet-group
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: RDS-Patch-Testing
+        - Key: CreatedBy
+          Value: CloudFormation
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub ${EnvironmentName}-postgres-2
+      DBName: !Ref DBName
+      Engine: postgres
+      EngineVersion: 14.12
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: 200
+      StorageEncrypted: true
+      StorageType: gp3
+      MasterUsername: !Ref RDSMasterUsername
+      ManageMasterUserPassword: true
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBParameterGroupName: !Ref RDSParameterGroup
+      PubliclyAccessible: false
+      MultiAZ: true
+      BackupRetentionPeriod: 7
+      DeletionProtection: false
+      CopyTagsToSnapshot: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-RDS
+        - Key: UpgradeDB
+          Value: Y
+        - Key: rds-maintenance-user-secret
+          Value: !Sub ${EnvironmentName}-postgres-maintenance-user-secret
+
+  MaintenanceUserSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub ${EnvironmentName}-postgres-maintenance-user-secret
+      Description: "Maintenance user credentials for PostgreSQL RDS instance"
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "rds_maintenance_user"}'
+        GenerateStringKey: "password"
+        PasswordLength: 18
+        ExcludeCharacters: '"@/\'''
+        ExcludePunctuation: true
+
+Outputs:
+  RDSEndpoint:
+    Description: RDS instance endpoint
+    Value: !GetAtt RDSInstance.Endpoint.Address
+
+  RDSPort:
+    Description: RDS instance port
+    Value: !GetAtt RDSInstance.Endpoint.Port
+
+  ParameterGroupName:
+    Description: Parameter group name
+    Value: !Ref RDSParameterGroup
+
+  RDSInstanceId:
+    Description: RDS Instance ID
+    Value: !Ref RDSInstance
+  
+  MaintenanceUserSecretArn:
+    Description: ARN of the maintenance user secret
+    Value: !Ref MaintenanceUserSecret

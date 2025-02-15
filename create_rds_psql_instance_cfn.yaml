@@ -431,6 +431,20 @@ Resources:
           Value: !Sub ${EnvironmentName}-RDSInstance
         - Key: UpgradeDB
           Value: Y
+        - Key: rds-maintenance-user-secret
+          Value: !Sub ${EnvironmentName}-postgres-maintenance-user-secret
+
+  MaintenanceUserSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub ${EnvironmentName}-postgres-maintenance-user-secret
+      Description: "Maintenance user credentials for PostgreSQL RDS instance"
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "rds_maintenance_user"}'
+        GenerateStringKey: "password"
+        PasswordLength: 18
+        ExcludeCharacters: '"@/\'''
+        ExcludePunctuation: true
 
 Outputs:
   VpcId:
@@ -476,3 +490,11 @@ Outputs:
   RDSPort:
     Description: RDS Instance Port
     Value: !GetAtt RDSInstance.Endpoint.Port
+
+  RDSInstanceId:
+    Description: RDS Instance ID
+    Value: !Ref RDSInstance
+  
+  MaintenanceUserSecretArn:
+    Description: ARN of the maintenance user secret
+    Value: !Ref MaintenanceUserSecret

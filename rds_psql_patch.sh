@@ -479,15 +479,16 @@ function get_rds_creds() {
     echo "secret_name = ${secret_name}"
 
     if [ -z "${secret_name}" ]; then
-        echo "ERROR: Could not find secret name in RDS tags"
-        return 1
+        echo -e "\nERROR: Could not find secret name in RDS tags, Check secret and try again.\n"
+        #return 1
+        exit 1
     fi
 
     # Get secret value
     SECRET_VALUE=$(${AWS_CLI} secretsmanager get-secret-value --secret-id ${secret_name} --query SecretString --output text)
     
     if [ -z "${SECRET_VALUE}" ]; then
-        echo "ERROR: Could not retrieve secret value"
+        echo -e "ERROR: Could not retrieve secret value.\n"
         return 1
     fi
     
@@ -498,8 +499,9 @@ function get_rds_creds() {
     echo "db user name = ${db_username}"
 
     if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-        echo "ERROR: Could not extract username or password from secret"
-        return 1
+        echo -e "\nERROR: Could not extract username or password from secret. Check secret and try again.\n"
+        #return 1
+        exit 1
     fi
 
     export PGPASSWORD="${db_password}"
@@ -857,7 +859,7 @@ check_rds_upgrade_version() {
         echo -e "\nINFO: Version ${target_version} is a valid ${upgrade_type} version upgrade target"
         return 0
     else
-        echo -e "\nINFO: ERROR: Version ${target_version} is not a valid upgrade target"
+        echo -e "\nERROR: Version ${target_version} is not a valid upgrade target"
         echo -e "\nINFO: Available upgrade options for PostgreSQL ${current_engine_version}:"
         echo "INFO: ----------------------------------------------------------------"
         printf "INFO: %-15s %-15s\n" "VERSION" "UPGRADE TYPE"

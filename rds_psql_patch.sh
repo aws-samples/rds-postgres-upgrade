@@ -77,7 +77,6 @@
 
 # Environment Variables - Input parameters #
 current_db_instance_id=${1}
-#next_engine_version=$(echo "${2}" | bc)
 next_engine_version=${2}
 
 run_pre_upg_tasks=${3}
@@ -479,8 +478,7 @@ function get_rds_creds() {
     echo "secret_name = ${secret_name}"
 
     if [ -z "${secret_name}" ]; then
-        echo -e "\nERROR: Could not find secret name in RDS tags, Check secret and try again.\n"
-        #return 1
+        echo -e "\nERROR: Could not find secret name in RDS tags. Please check secret and try again.\n"
         exit 1
     fi
 
@@ -488,8 +486,8 @@ function get_rds_creds() {
     SECRET_VALUE=$(${AWS_CLI} secretsmanager get-secret-value --secret-id ${secret_name} --query SecretString --output text)
     
     if [ -z "${SECRET_VALUE}" ]; then
-        echo -e "ERROR: Could not retrieve secret value.\n"
-        return 1
+        echo -e "\nERROR: Could not retrieve secret value. Please check secret and try again. \n"
+        exit 1
     fi
     
     # Extract username and password
@@ -500,7 +498,6 @@ function get_rds_creds() {
 
     if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
         echo -e "\nERROR: Could not extract username or password from secret. Check secret and try again.\n"
-        #return 1
         exit 1
     fi
 
@@ -548,9 +545,9 @@ function run_psql_command() {
 
         # Validate DB credentials
         if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-            echo "WARNING: Database credentials NOT found. Command ${1} will NOT run."
+            echo -e "\nERROR: Database credentials NOT found. Command ${1} will NOT run. Please check and retry again. \n"
             echo "----------------------------------------------------------------"
-            return 1
+            exit 1
         fi
         echo "INFO: Database credentials retrieved successfully."
 
@@ -560,9 +557,9 @@ function run_psql_command() {
             -d "${db_name}" -c '\q'
             #-d "${db_name}" -c '\q' >/dev/null 2>&1
         then
-            echo "ERROR: Failed to connect to database"
+            echo -e "\nERROR: Failed to connect to database. Please check and retry again. \n"
             echo "----------------------------------------------------------------"
-            return 1
+            exit 1
         fi
         echo "INFO: Database connection successful"
 
@@ -651,12 +648,11 @@ function run_psql_drop_repl_slot() {
         # Validate DB credentials
         if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
             echo "ERROR: Database credentials NOT found."
-            #echo "ERROR: MAJOR version upgrade will NOT run if there are one or more replication slots."
-            echo "ERROR: [Replication Slots] Check if the instance has replication slots. Major Version upgrade will fail if there are one or more replication slots."
-            echo "ERROR: [Extension check] Check if there are extensions on older version which may not be compatible with target version. Major version will fail if there are extensions that are not compatible with target version."
+            echo "ERROR: [Replication Slots] Please check if the instance has replication slots. Major Version upgrade will fail if there are one or more replication slots."
+            echo "ERROR: [Extension check] Please check if there are extensions on older version which may not be compatible with target version. Major version will fail if there are extensions that are not compatible with target version."
 
             echo "----------------------------------------------------------------"
-            return 1
+            exit 1
         fi
         echo "INFO: Database credentials retrieved successfully."
 
@@ -665,9 +661,9 @@ function run_psql_drop_repl_slot() {
         repl_slot_count=$(${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots" 2>&1)
         
         if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to query replication slots:"
+            echo -e "\nERROR: Failed to query replication slots. Please check and retry again. \n"
             echo "${repl_slot_count}"
-            return 1
+            exit 1
         fi
 
         echo "INFO: Current replication slot count = ${repl_slot_count}"
@@ -693,9 +689,9 @@ function run_psql_drop_repl_slot() {
                     -c "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN (SELECT slot_name FROM pg_replication_slots)" 2>&1)
                 
                 if [ $? -ne 0 ]; then
-                    echo "ERROR: Failed to drop replication slots:"
+                    echo -e "\nERROR: Failed to drop replication slots. Please check and retry again. \n"
                     echo "${drop_result}"
-                    return 1
+                    exit 1
                 fi
 
                 echo "INFO: Replication Slot operation result: ${drop_result}"
@@ -713,8 +709,8 @@ function run_psql_drop_repl_slot() {
                 final_count=$(${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots")
                 
                 if [ $? -ne 0 ]; then
-                    echo "ERROR: Failed to get final replication slot count"
-                    return 1
+                    echo -e "\nERROR: Failed to get final replication slot count. Please check and retry again. \n"
+                    exit 1
                 fi
 
                 echo "INFO: Final replication slot count = ${final_count}"
@@ -722,7 +718,8 @@ function run_psql_drop_repl_slot() {
                 if [ "${final_count}" -eq 0 ]; then
                     echo "SUCCESS: All replication slots were successfully dropped."
                 else
-                    echo "ERROR: ${final_count} replication slots still exist. Upgrade cannot proceed until they are dropped."
+                    echo -e "\nERROR: ${final_count} replication slots still exist. Upgrade cannot proceed until they are dropped. Please check and retry again. \n"
+                    exit 1
                 fi
 
             else
@@ -846,8 +843,8 @@ check_rds_upgrade_version() {
         --output text)
     
     if [ $? -ne 0 ] || [ -z "${valid_versions}" ]; then
-        echo "ERROR: Failed to retrieve valid upgrade versions"
-        return 1
+        echo -e "\nERROR: Failed to retrieve valid upgrade versions. Please check and retry again. \n"
+        exit 1
     fi
     
     # Check if target version is in the list of valid upgrades
@@ -946,15 +943,15 @@ function update_extensions() {
 
         # Check if DB credentials exist
         if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-            echo "ERROR: Database credentials not found in secret manager"
-            return 1
+            echo -e "\nERROR: Database credentials not found in secret manager. Please check and retry again. \n"
+            exit 1
         fi
 
         # Connect to the PostgreSQL database
         echo "INFO: Testing database connection..."
         if ! ${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -p "${db_port}" -d "${db_name}" -c '\q' >/dev/null 2>&1; then
-            echo "ERROR: Failed to connect to the PostgreSQL database."
-            return 1
+            echo -e "\nERROR: Failed to connect to the PostgreSQL database. Please check and retry again. \n"
+            exit 1
         fi
         echo "INFO: Database connection successful"
 
@@ -997,8 +994,8 @@ function update_extensions() {
 EOF
 
         if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to update extensions"
-            return 1
+            echo -e "\nERROR: Failed to update extensions. Please check and retry again. \n"
+            exit 1
         fi
 
         echo -e "\nINFO: Extension update process completed at $(date)"
@@ -1127,8 +1124,6 @@ if [ "${current_engine_type}" = "postgres" ]; then
 
     else # run_pre_upg_tasks = UPGRADE; perform upgrade/patching tasks
 
-        echo "INFO: DB Parameter Group Exists already. No need to create a new DB parameter group."
-        #UPGRADE_SCOPE="minor"
         db_param_group_name=${current_db_param_group}
         
         # take DB snapshot for MINOR version upgrade only; for MAJOR version, snapshot is taken automatically/default #

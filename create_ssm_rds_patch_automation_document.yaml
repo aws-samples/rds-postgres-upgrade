@@ -6,6 +6,7 @@ Resources:
   AutomationServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: RDSPostgreSQL-fleet-upgrade-automation-role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -13,12 +14,19 @@ Resources:
             Principal:
               Service: ssm.amazonaws.com
             Action: sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
 
   RDSPostgreSQLFleetUpgrade:
     Type: AWS::SSM::Document
     Properties:
+      Name: RDS-PostgreSQL-Fleet-Upgrade
       DocumentType: Automation
       Content:
         schemaVersion: '0.3'
@@ -177,10 +185,10 @@ Resources:
                         cd "${SCRIPTS_DIR}"
                         log_message "${INSTANCE}" "Starting upgrade process" "${INSTANCE_LOG}"
                         if ./rds_psql_patch.sh "${INSTANCE}" "{{ TargetEngineVersion }}" "{{ RunPreUpgradeTasks }}" >> "${INSTANCE_LOG}" 2>&1; then
-                          log_message "${INSTANCE}" "Upgrade completed successfully" "${INSTANCE_LOG}"
+                          log_message "${INSTANCE}" "{ RunPreUpgradeTasks } completed." "${INSTANCE_LOG}"
                           echo "SUCCESS" > "${INSTANCE_LOG_DIR}/status"
                         else
-                          log_message "${INSTANCE}" "Upgrade failed" "${INSTANCE_LOG}"
+                          log_message "${INSTANCE}" "{ RunPreUpgradeTasks } failed" "${INSTANCE_LOG}"
                           echo "FAILED" > "${INSTANCE_LOG_DIR}/status"
                           exit 1
                         fi
@@ -233,13 +241,13 @@ Resources:
                     done < "${INSTANCE_LIST_FILE}"
 
                     if [ $EXIT_STATUS -eq 0 ] && [ -z "${FAILED_INSTANCES}" ]; then
-                      log_message "MASTER" "INFO: All upgrades completed successfully" "${MASTER_LOG}"
+                      log_message "MASTER" "INFO: All { RunPreUpgradeTasks } tasks completed." "${MASTER_LOG}"
                     else
-                      log_message "MASTER" "ERROR: Some upgrades failed. Failed instances:${FAILED_INSTANCES}" "${MASTER_LOG}"
+                      log_message "MASTER" "ERROR: Some { RunPreUpgradeTasks } tasks failed. Failed instances:${FAILED_INSTANCES}" "${MASTER_LOG}"
                     fi
 
                     if [ -n "{{ S3BucketName }}" ]; then
-                      log_message "MASTER" "INFO: Uploading logs to S3..." "${MASTER_LOG}"
+                      #log_message "MASTER" "INFO: Uploading logs to S3..." "${MASTER_LOG}"
                       aws s3 cp "${LOGS_DIR}" "s3://{{ S3BucketName }}/logs/$(date '+%Y-%m-%d')/" --recursive
                     fi
 

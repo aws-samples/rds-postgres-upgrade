@@ -12,6 +12,14 @@
 #           Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
 #                 for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
 #
+# Note:  1. This script can be executed standalone, outside of SSM. It can also be integrated into CI/CD pipelines 
+#           like CodeCommit, Jenkins, and other.
+#        2. Standalone version has been tested, but it still needs to be tested throughly in your non-prod environment.
+#        3. If running standalone, set SNS topic and S3 bucket name in the envioronment if email notification is required and
+#           log files needs to be pushed and stored in S3 bucket. For e.g.:
+#               export S3_BUCKET_PATCH_LOGS="rds-psql-patch-test1-s3"
+#               export SNS_TOPIC_ARN_EMAIL="arn:aws:sns:us-east-1:1234567890:rds-psql-patch-test-sns-topic"
+#
 # Example Usage:
 #        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PREUPGRADE >logs/pre-upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
 #        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 UPGRADE >logs/upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
@@ -42,6 +50,7 @@
 #        - AWS CLI
 #        - PostgreSQL client utilities
 #        - jq for JSON processing
+#        - bc (basic calculator) utility
 #
 #	   4. Update environment variables "manual" section if/as needed (optional)
 #
@@ -61,12 +70,15 @@
 #     send_email - send email
 #     get_db_info - get database related info into local variables
 #     check_rds_upgrade_version - check if the next-engine-version is valid for the current rds-postgresql instance version
+#     check_db_name - function to check if db name is null. If null, DB related tasks will not apply
+#     check_required_utils - function to check required utilities
 #
 ##-------------------------------------------------------------------------------------
 
 # Environment Variables - Input parameters #
 current_db_instance_id=${1}
-next_engine_version=$(echo "${2}" | bc)
+#next_engine_version=$(echo "${2}" | bc)
+next_engine_version=${2}
 
 run_pre_upg_tasks=${3}
 run_pre_upg_tasks="${run_pre_upg_tasks^^}"  # convert to upper case #
@@ -113,21 +125,74 @@ fi
 
 # Display input parameters for verification
 echo ""
-echo "INFO: Input parameter 1: $current_db_instance_id"
-echo "INFO: Input parameter 2: $next_engine_version"
-echo "INFO: Input parameter 3: $run_pre_upg_tasks"
+echo "INFO: Input parameter 1 [DB InstanceID]: $current_db_instance_id"
+echo "INFO: Input parameter 2 [Requested Upgrade Engine Version]: $next_engine_version"
+echo "INFO: Input parameter 3 [Upgrade Option]: $run_pre_upg_tasks"
 echo ""
 
 if [ "${run_pre_upg_tasks}" = "PREUPGRADE" ]; then
-   EMAIL_SUBJECT="RDS PostgreSQL DB Pre-Upgrade Tasks"
+   EMAIL_SUBJECT="RDS PostgreSQL PREUPGRADE Tasks"
 else
-   EMAIL_SUBJECT="RDS PostgreSQL DB Upgrade"
+   EMAIL_SUBJECT="RDS PostgreSQL UPGRADE"
 fi
 
 echo -e "\nBEGIN -  ${EMAIL_SUBJECT} - $(date)"
 
 ##-------------------------------------------------------------------------------------
 # functions #
+##-------------------------------------------------------------------------------------
+
+# Function to check required utilities
+check_required_utils() {
+    local missing_utils=()
+    
+    # List of required utilities
+    local utils=(
+        "aws"
+        "jq"
+        "bc"
+        "psql"
+        "grep"
+        "cut"
+        "tr"
+        "tee"
+        "date"
+        "which"
+    )
+    
+    echo -e "\nINFO: Checking for required utilities...\n"
+    for util in "${utils[@]}"; do
+        if ! command -v "$util" >/dev/null 2>&1; then
+            missing_utils+=("$util")
+        fi
+    done
+    
+    if [ ${#missing_utils[@]} -ne 0 ]; then
+        echo "ERROR: The following required utilities are missing:"
+        for util in "${missing_utils[@]}"; do
+            echo "  - $util"
+        done
+
+        echo -e "\nERROR: Please install the missing utilities before running this script. \n"
+        return 1
+    fi
+    
+    echo -e "\nINFO: All required utilities are present. \n"
+    return 0
+}
+##-------------------------------------------------------------------------------------
+
+# function to check if db name is null. If null, DB related tasks will not apply.
+function check_db_name() {
+    local db_name="$1"
+    
+    if [ -z "${db_name}" ] || [ "${db_name}" = "null" ]; then
+        echo -e "\nINFO: Database name is empty. Above step is not required. \n"
+        return 1
+    fi
+    
+    return 0
+}
 ##-------------------------------------------------------------------------------------
 
 # funtion to check DBInstance status #
@@ -326,7 +391,7 @@ function db_upgrade() {
 function db_modify_logs() {
 
 	echo -e "\nINFO: Execute db_modify_logs function...\n"
-        return_value=""
+    return_value=""
 
         ${AWS_CLI} rds modify-db-instance \
                 --db-instance-identifier ${current_db_instance_id} \
@@ -336,7 +401,8 @@ function db_modify_logs() {
         return_value="$?"
         echo "DBModifyLogs ReturnValue = ${return_value}"
         if [ "${return_value}" != "0" ]; then
-           exit 1
+            echo -e "\ERROR: Unable to configure DB logs to CloudWatch. Existing the upgrade process.\n"
+            exit 1
         fi
 
 	echo ""
@@ -398,6 +464,9 @@ function db_pending_maint() {
 function get_rds_creds() {
     echo -e "\nINFO: Execute get_rds_creds function...\n"
     
+    # Call helper function to validate db_name
+    check_db_name "${db_name}" || return $?
+
     # Get instance information and ARN
     rds_instance_info=$(${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --output json)
     db_arn=$(echo ${rds_instance_info} | jq -r '.DBInstances[0].DBInstanceArn')
@@ -445,7 +514,10 @@ function get_rds_creds() {
 # run analyze in PSQL database #
 function run_psql_command() {
 
-   echo -e "\nINFO: Execute run_psql_command function...\n"
+    echo -e "\nINFO: Execute run_psql_command function...\n"
+
+    # Call helper function to validate db_name
+    check_db_name "${db_name}" || return $?
 
     # Create log file path
     local log_file="${LOGS_DIR}/${current_db_instance_id}/run_db_task_${1,,}-${DATE_TIME}.log"
@@ -552,6 +624,9 @@ function run_psql_command() {
 function run_psql_drop_repl_slot() {
 
     echo -e "\nINFO: Execute run_psql_drop_repl_slot function...\n"
+
+    # Call helper function to validate db_name
+    check_db_name "${db_name}" || return $?
 
     # Create log file path
     local log_file="${LOGS_DIR}/${current_db_instance_id}/replication_slot_${DATE_TIME}.log"
@@ -753,34 +828,55 @@ function send_email() {
 # function to check if the next-engine-version is valid for the current rds-postgresql instance version #
 # Usage example: check_rds_upgrade_version "rds-psql-patch-instance-1" "16.6"
 check_rds_upgrade_version() {
-
     local instance_id="$1"
     local target_version="$2"
     
-    echo -e "\nINFO: Checking if version ${target_version} is a valid upgrade target for ${instance_id}..."
+    echo -e "\nINFO: Checking upgrade version compatibility..."
+    echo "INFO: DB Instance:        ${instance_id}"
+    echo "INFO: Current Version:    ${current_engine_version}"
+    echo "INFO: Requested Version:  ${target_version}"
     
-    is_valid=$(aws rds describe-db-engine-versions \
+    # Get valid upgrade targets with IsMajorVersionUpgrade flag
+    valid_versions=$(aws rds describe-db-engine-versions \
         --engine postgres \
-        --engine-version $(aws rds describe-db-instances \
-            --db-instance-identifier "$instance_id" \
-            --query 'DBInstances[0].EngineVersion' \
-            --output text) \
-        --query 'DBEngineVersions[0].ValidUpgradeTarget[*].EngineVersion' \
-        --output text | grep -q "$target_version" && echo "true" || echo "false")
-
-    if [ "$is_valid" = "false" ]; then
-        echo "INFO: Please check the available upgrade versions and try again"
-        echo -e "\nERROR: Version ${target_version} is not a valid upgrade target for instance ${instance_id} \n"
+        --engine-version "${current_engine_version}" \
+        --query 'DBEngineVersions[].ValidUpgradeTarget[].[EngineVersion,IsMajorVersionUpgrade]' \
+        --output text)
+    
+    if [ $? -ne 0 ] || [ -z "${valid_versions}" ]; then
+        echo "ERROR: Failed to retrieve valid upgrade versions"
         return 1
     fi
-
-    echo -e "\nINFO: Version ${target_version} is a valid upgrade target \n"
-    return 0
+    
+    # Check if target version is in the list of valid upgrades
+    if echo "${valid_versions}" | awk '{print $1}' | grep -q "^${target_version}$"; then
+        # Get upgrade type (major/minor)
+        is_major=$(echo "${valid_versions}" | grep "^${target_version}" | awk '{print $2}')
+        upgrade_type=$([ "${is_major}" = "True" ] && echo "major" || echo "minor")
+        
+        echo -e "\nINFO: Version ${target_version} is a valid ${upgrade_type} version upgrade target"
+        return 0
+    else
+        echo -e "\nINFO: ERROR: Version ${target_version} is not a valid upgrade target"
+        echo -e "\nINFO: Available upgrade options for PostgreSQL ${current_engine_version}:"
+        echo "INFO: ----------------------------------------------------------------"
+        printf "INFO: %-15s %-15s\n" "VERSION" "UPGRADE TYPE"
+        echo "INFO: ----------------------------------------------------------------"
+        
+        # Format and display available versions
+        echo "${valid_versions}" | while read -r version is_major; do
+            upgrade_type=$([ "${is_major}" = "True" ] && echo "major" || echo "minor")
+            printf "INFO: %-15s %-15s\n" "${version}" "${upgrade_type}"
+        done
+        echo "INFO: ----------------------------------------------------------------"
+        return 1
+    fi
 }
 ##-------------------------------------------------------------------------------------
 
 # function to determine if upgrade/patching path is MINOR or MAJOR #
 function check_upgrade_type() {
+
     echo -e "\nINFO: Checking upgrade type..."
 
     # Extract major version numbers (family)
@@ -820,7 +916,10 @@ function check_upgrade_type() {
 # function to update PostgreSQL extensions
 function update_extensions() {
 
-   echo -e "\nINFO: Execute update_extensions function...\n"
+    echo -e "\nINFO: Execute update_extensions function...\n"
+
+    # Call helper function to validate db_name
+    check_db_name "${db_name}" || return $?
 
     # Create log file path
     local log_file="${LOGS_DIR}/${current_db_instance_id}/update_db_extensions_${DATE_TIME}.log"
@@ -958,6 +1057,16 @@ echo ""
 ##-------------------------------------------------------------------------------------
 ##------------------------EXECUTE RDS-PostgreSQL UPGRADE/PATCHING TASKS----------------
 ##-------------------------------------------------------------------------------------
+
+# Check for unix functions #
+check_required_utils || exit 1
+
+# validate next engine version for numeric #
+next_engine_version=$(echo "${next_engine_version}" | bc) || {
+    echo -e "\nERROR: Invalid version number format: ${next_engine_version} \n"
+    exit 1
+}
+
 # run upgrade only when db status is available and there are no pending maintenace tasks #
 current_db_status=$( ${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --query 'DBInstances[0].[DBInstanceStatus]' --output text )
 echo "InitialDBStatus = ${current_db_status}"
@@ -982,11 +1091,11 @@ get_db_info
 if [ "${current_engine_type}" = "postgres" ]; then
 
     # call function to check if the next-engine-version is valid for the current rds-postgresql instance version #
-    check_rds_upgrade_version "${current_db_instance_id}" "${next_engine_version}"
-    if [ $? -ne 0 ]; then
-        #echo -e "\nERROR: Invalid next engine version provided. Upgrade can not proceed.\n"
+    #check_rds_upgrade_version "${current_db_instance_id}" "${next_engine_version}"
+    check_rds_upgrade_version "${current_db_instance_id}" "${next_engine_version}" || {
+        echo -e "\nERROR: Please select a valid upgrade version and try again. \n"
         exit 1
-    fi
+    }
 
     # call function to check if upgrade/patching path is MINOR or MAJOR #
     check_upgrade_type

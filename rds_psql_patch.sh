@@ -6,11 +6,19 @@
 # Usage: ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [run-pre-check]
 #        ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 #
-#       	PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
+#           PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
 #           UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
-#           
-#           Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
-#                 for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
+#
+# Note: 
+#       1. Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
+#          for appropriate minor or major supported verion (a.k.a appropirate upgrade path) 
+$       2. This script can be executed standalone, outside of SSM. It can also be integrated into CI/CD pipelines 
+#          like CodeCommit, Jenkins, and other.
+#       3. Standalone version has been tested, but it still needs to be tested throughly in your non-prod environment.
+#       4. If running standalone, set SNS topic and S3 bucket name in the envioronment if email notification is required and
+#          log files needs to be pushed and stored in S3 bucket. For e.g.:
+#               export S3_BUCKET_PATCH_LOGS="rds-psql-patch-test1-s3"
+#               export SNS_TOPIC_ARN_EMAIL="arn:aws:sns:us-east-1:1234567890:rds-psql-patch-test-sns-topic"
 #
 # Example Usage:
 #        nohup ./rds_psql_patch.sh rds-psql-patch-test-1 15.6 PREUPGRADE >logs/pre-upgrade-rds-psql-patch-test-1-`date +'%Y%m%d-%H-%M-%S'`.out 2>&1 &
@@ -42,6 +50,7 @@
 #        - AWS CLI
 #        - PostgreSQL client utilities
 #        - jq for JSON processing
+#        - bc (basic calculator) utility
 #
 #	   4. Update environment variables "manual" section if/as needed (optional)
 #
@@ -61,12 +70,14 @@
 #     send_email - send email
 #     get_db_info - get database related info into local variables
 #     check_rds_upgrade_version - check if the next-engine-version is valid for the current rds-postgresql instance version
+#     check_db_name - function to check if db name is null. If null, DB related tasks will not apply
+#     check_required_utils - function to check required utilities
 #
 ##-------------------------------------------------------------------------------------
 
 # Environment Variables - Input parameters #
 current_db_instance_id=${1}
-next_engine_version=$(echo "${2}" | bc)
+next_engine_version=${2}
 
 run_pre_upg_tasks=${3}
 run_pre_upg_tasks="${run_pre_upg_tasks^^}"  # convert to upper case #
@@ -113,21 +124,74 @@ fi
 
 # Display input parameters for verification
 echo ""
-echo "INFO: Input parameter 1: $current_db_instance_id"
-echo "INFO: Input parameter 2: $next_engine_version"
-echo "INFO: Input parameter 3: $run_pre_upg_tasks"
+echo "INFO: Input parameter 1 [DB InstanceID]: $current_db_instance_id"
+echo "INFO: Input parameter 2 [Requested Upgrade Engine Version]: $next_engine_version"
+echo "INFO: Input parameter 3 [Upgrade Option]: $run_pre_upg_tasks"
 echo ""
 
 if [ "${run_pre_upg_tasks}" = "PREUPGRADE" ]; then
-   EMAIL_SUBJECT="RDS PostgreSQL DB Pre-Upgrade Tasks"
+   EMAIL_SUBJECT="RDS PostgreSQL PREUPGRADE Tasks"
 else
-   EMAIL_SUBJECT="RDS PostgreSQL DB Upgrade"
+   EMAIL_SUBJECT="RDS PostgreSQL UPGRADE"
 fi
 
 echo -e "\nBEGIN -  ${EMAIL_SUBJECT} - $(date)"
 
 ##-------------------------------------------------------------------------------------
 # functions #
+##-------------------------------------------------------------------------------------
+
+# Function to check required utilities
+check_required_utils() {
+    local missing_utils=()
+    
+    # List of required utilities
+    local utils=(
+        "aws"
+        "jq"
+        "bc"
+        "psql"
+        "grep"
+        "cut"
+        "tr"
+        "tee"
+        "date"
+        "which"
+    )
+    
+    echo -e "\nINFO: Checking for required utilities...\n"
+    for util in "${utils[@]}"; do
+        if ! command -v "$util" >/dev/null 2>&1; then
+            missing_utils+=("$util")
+        fi
+    done
+    
+    if [ ${#missing_utils[@]} -ne 0 ]; then
+        echo "ERROR: The following required utilities are missing:"
+        for util in "${missing_utils[@]}"; do
+            echo "  - $util"
+        done
+
+        echo -e "\nERROR: Please install the missing utilities before running this script. \n"
+        return 1
+    fi
+    
+    echo -e "\nINFO: All required utilities are present. \n"
+    return 0
+}
+##-------------------------------------------------------------------------------------
+
+# function to check if db name is null. If null, DB related tasks will not apply.
+function check_db_name() {
+    local db_name="$1"
+    
+    if [ -z "${db_name}" ] || [ "${db_name}" = "null" ]; then
+        echo -e "\nINFO: Database name is empty. Above step is not required. \n"
+        return 1
+    fi
+    
+    return 0
+}
 ##-------------------------------------------------------------------------------------
 
 # funtion to check DBInstance status #
@@ -311,7 +375,7 @@ function db_upgrade() {
 
     # compare current engine version with next engine version #
     if [ "${current_db_engine_version_after}" = "${next_engine_version}" ]; then
-       echo -e "\nINFO: DB instance is upgraded to ${next_engine_version}. Upgrade is successful.\n"
+       echo -e "\nINFO: DB instance is upgraded to ${next_engine_version} from ${current_engine_version}. Upgrade is successful.\n"
     else
        echo -e "\nERROR: DB instance is not upgraded to ${next_engine_version}. Please check upgrade and database logs for more details.\n"
        exit 1
@@ -326,7 +390,7 @@ function db_upgrade() {
 function db_modify_logs() {
 
 	echo -e "\nINFO: Execute db_modify_logs function...\n"
-        return_value=""
+    return_value=""
 
         ${AWS_CLI} rds modify-db-instance \
                 --db-instance-identifier ${current_db_instance_id} \
@@ -336,7 +400,8 @@ function db_modify_logs() {
         return_value="$?"
         echo "DBModifyLogs ReturnValue = ${return_value}"
         if [ "${return_value}" != "0" ]; then
-           exit 1
+            echo -e "\ERROR: Unable to configure DB logs to CloudWatch. Existing the upgrade process.\n"
+            exit 1
         fi
 
 	echo ""
@@ -396,8 +461,11 @@ function db_pending_maint() {
 
 # function to retrieve DB creds from secret manager #
 function get_rds_creds() {
-    echo -e "\nINFO: Execute get_rds_creds function...\n"
+    echo -e "\nINFO: Execute get_rds_creds function... \n"
     
+    # Call helper function to validate db_name
+    check_db_name "${db_name}" || return $?
+
     # Get instance information and ARN
     rds_instance_info=$(${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --output json)
     db_arn=$(echo ${rds_instance_info} | jq -r '.DBInstances[0].DBInstanceArn')
@@ -410,7 +478,7 @@ function get_rds_creds() {
     echo "secret_name = ${secret_name}"
 
     if [ -z "${secret_name}" ]; then
-        echo "ERROR: Could not find secret name in RDS tags"
+        echo -e "\nERROR: Could not find secret name in RDS tags. Please check secret and try again.\n"
         return 1
     fi
 
@@ -418,7 +486,7 @@ function get_rds_creds() {
     SECRET_VALUE=$(${AWS_CLI} secretsmanager get-secret-value --secret-id ${secret_name} --query SecretString --output text)
     
     if [ -z "${SECRET_VALUE}" ]; then
-        echo "ERROR: Could not retrieve secret value"
+        echo -e "\nERROR: Could not retrieve secret value. Please check secret and try again. \n"
         return 1
     fi
     
@@ -429,7 +497,7 @@ function get_rds_creds() {
     echo "db user name = ${db_username}"
 
     if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-        echo "ERROR: Could not extract username or password from secret"
+        echo -e "\nERROR: Could not extract username or password from secret. Check secret and try again.\n"
         return 1
     fi
 
@@ -439,13 +507,15 @@ function get_rds_creds() {
     
     return 0
 }
-
 ##-------------------------------------------------------------------------------------
 
 # run analyze in PSQL database #
 function run_psql_command() {
 
-   echo -e "\nINFO: Execute run_psql_command function...\n"
+    echo -e "\nINFO: Execute run_psql_command function to run task: ${1} ...\n"
+
+    # Call helper function to validate db_name
+    check_db_name "${db_name}" || return $?
 
     # Create log file path
     local log_file="${LOGS_DIR}/${current_db_instance_id}/run_db_task_${1,,}-${DATE_TIME}.log"
@@ -454,9 +524,21 @@ function run_psql_command() {
     # Ensure log directory exists
     mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
 
+
     # Initialize command status
     local cmd_status=0
     local cmd=""
+
+    # Get DB credentials
+    get_rds_creds || exit 1
+
+    # Validate DB credentials
+    if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
+        echo -e "\nERROR: Database credentials NOT found. Command ${1} will NOT run. Please check and retry again. \n"
+        echo "----------------------------------------------------------------"
+        exit 1
+    fi
+    echo "INFO: Database credentials retrieved successfully."
 
     {
         echo "================================================================"
@@ -468,27 +550,15 @@ function run_psql_command() {
         echo "Log File: ${log_file}"
         echo "----------------------------------------------------------------"
 
-        # Get DB credentials
-        echo "INFO: Retrieving database credentials..."
-        get_rds_creds
-
-        # Validate DB credentials
-        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-            echo "WARNING: Database credentials NOT found. Command ${1} will NOT run."
-            echo "----------------------------------------------------------------"
-            return 1
-        fi
-        echo "INFO: Database credentials retrieved successfully."
-
         # Test database connection
         echo "INFO: Testing database connection..."
         if ! "${PSQL_BIN}" -U "${db_username}" -h "${db_endpoint}" -p "${db_port}" \
             -d "${db_name}" -c '\q'
             #-d "${db_name}" -c '\q' >/dev/null 2>&1
         then
-            echo "ERROR: Failed to connect to database"
+            echo -e "\nERROR: Failed to connect to database. Please check and retry again. \n"
             echo "----------------------------------------------------------------"
-            return 1
+            exit 1
         fi
         echo "INFO: Database connection successful"
 
@@ -553,11 +623,29 @@ function run_psql_drop_repl_slot() {
 
     echo -e "\nINFO: Execute run_psql_drop_repl_slot function...\n"
 
+    # Call helper function to validate db_name
+    check_db_name "${db_name}" || return $?
+
     # Create log file path
     local log_file="${LOGS_DIR}/${current_db_instance_id}/replication_slot_${DATE_TIME}.log"
+    local exit_status=0
 
     # Ensure log directory exists
     mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
+
+    # Get DB credentials from secret manager
+    get_rds_creds || exit 1
+
+    # Validate DB credentials
+    if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
+        echo "ERROR: Database credentials NOT found."
+        echo "ERROR: [Replication Slots] Please check if the instance has replication slots. Major Version upgrade will fail if there are one or more replication slots."
+        echo "ERROR: [Extension check] Please check if there are extensions on older version which may not be compatible with target version. Major version will fail if there are extensions that are not compatible with target version."
+
+        echo "----------------------------------------------------------------"
+        exit 1
+    fi
+    echo "INFO: Database credentials retrieved successfully."
 
     {
         echo "================================================================"
@@ -567,30 +655,14 @@ function run_psql_drop_repl_slot() {
         echo "Log File: ${log_file}"
         echo "----------------------------------------------------------------"
 
-        # Get DB credentials from secret manager
-        echo "INFO: Retrieving database credentials..."
-        get_rds_creds
-
-        # Validate DB credentials
-        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-            echo "ERROR: Database credentials NOT found."
-            #echo "ERROR: MAJOR version upgrade will NOT run if there are one or more replication slots."
-            echo "ERROR: [Replication Slots] Check if the instance has replication slots. Major Version upgrade will fail if there are one or more replication slots."
-            echo "ERROR: [Extension check] Check if there are extensions on older version which may not be compatible with target version. Major version will fail if there are extensions that are not compatible with target version."
-
-            echo "----------------------------------------------------------------"
-            return 1
-        fi
-        echo "INFO: Database credentials retrieved successfully."
-
         # Check for existing replication slots
         echo "INFO: Checking for existing replication slots..."
         repl_slot_count=$(${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots" 2>&1)
         
         if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to query replication slots:"
+            echo -e "\nERROR: Failed to query replication slots. Please check and retry again. \n"
             echo "${repl_slot_count}"
-            return 1
+            exit 1
         fi
 
         echo "INFO: Current replication slot count = ${repl_slot_count}"
@@ -616,9 +688,9 @@ function run_psql_drop_repl_slot() {
                     -c "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN (SELECT slot_name FROM pg_replication_slots)" 2>&1)
                 
                 if [ $? -ne 0 ]; then
-                    echo "ERROR: Failed to drop replication slots:"
+                    echo -e "\nERROR: Failed to drop replication slots. Please check and retry again. \n"
                     echo "${drop_result}"
-                    return 1
+                    exit 1
                 fi
 
                 echo "INFO: Replication Slot operation result: ${drop_result}"
@@ -636,8 +708,8 @@ function run_psql_drop_repl_slot() {
                 final_count=$(${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -d "${db_name}" -AXqtc "SELECT COUNT(*) cnt FROM pg_replication_slots")
                 
                 if [ $? -ne 0 ]; then
-                    echo "ERROR: Failed to get final replication slot count"
-                    return 1
+                    echo -e "\nERROR: Failed to get final replication slot count. Please check and retry again. \n"
+                    exit 1
                 fi
 
                 echo "INFO: Final replication slot count = ${final_count}"
@@ -645,7 +717,8 @@ function run_psql_drop_repl_slot() {
                 if [ "${final_count}" -eq 0 ]; then
                     echo "SUCCESS: All replication slots were successfully dropped."
                 else
-                    echo "ERROR: ${final_count} replication slots still exist. Upgrade cannot proceed until they are dropped."
+                    echo -e "\nERROR: ${final_count} replication slots still exist. Upgrade cannot proceed until they are dropped. Please check and retry again. \n"
+                    exit 1
                 fi
 
             else
@@ -753,35 +826,56 @@ function send_email() {
 # function to check if the next-engine-version is valid for the current rds-postgresql instance version #
 # Usage example: check_rds_upgrade_version "rds-psql-patch-instance-1" "16.6"
 check_rds_upgrade_version() {
-
     local instance_id="$1"
     local target_version="$2"
     
-    echo -e "\nINFO: Checking if version ${target_version} is a valid upgrade target for ${instance_id}..."
+    echo -e "\nINFO: Checking upgrade version compatibility..."
+    echo "INFO: DB Instance:        ${instance_id}"
+    echo "INFO: Current Version:    ${current_engine_version}"
+    echo "INFO: Requested Version:  ${target_version}"
     
-    is_valid=$(aws rds describe-db-engine-versions \
+    # Get valid upgrade targets with IsMajorVersionUpgrade flag
+    valid_versions=$(aws rds describe-db-engine-versions \
         --engine postgres \
-        --engine-version $(aws rds describe-db-instances \
-            --db-instance-identifier "$instance_id" \
-            --query 'DBInstances[0].EngineVersion' \
-            --output text) \
-        --query 'DBEngineVersions[0].ValidUpgradeTarget[*].EngineVersion' \
-        --output text | grep -q "$target_version" && echo "true" || echo "false")
-
-    if [ "$is_valid" = "false" ]; then
-        echo "INFO: Please check the available upgrade versions and try again"
-        echo -e "\nERROR: Version ${target_version} is not a valid upgrade target for instance ${instance_id} \n"
+        --engine-version "${current_engine_version}" \
+        --query 'DBEngineVersions[].ValidUpgradeTarget[].[EngineVersion,IsMajorVersionUpgrade]' \
+        --output text)
+    
+    if [ $? -ne 0 ] || [ -z "${valid_versions}" ]; then
+        echo -e "\nERROR: Failed to retrieve valid upgrade versions. Please check and retry again. \n"
+        exit 1
+    fi
+    
+    # Check if target version is in the list of valid upgrades
+    if echo "${valid_versions}" | awk '{print $1}' | grep -q "^${target_version}$"; then
+        # Get upgrade type (major/minor)
+        is_major=$(echo "${valid_versions}" | grep "^${target_version}" | awk '{print $2}')
+        upgrade_type=$([ "${is_major}" = "True" ] && echo "major" || echo "minor")
+        
+        echo -e "\nINFO: Version ${target_version} is a valid ${upgrade_type} version upgrade target"
+        return 0
+    else
+        echo -e "\nERROR: Version ${target_version} is not a valid upgrade target"
+        echo -e "\nINFO: Available upgrade options for PostgreSQL ${current_engine_version}:"
+        echo "INFO: ----------------------------------------------------------------"
+        printf "INFO: %-15s %-15s\n" "VERSION" "UPGRADE TYPE"
+        echo "INFO: ----------------------------------------------------------------"
+        
+        # Format and display available versions
+        echo "${valid_versions}" | while read -r version is_major; do
+            upgrade_type=$([ "${is_major}" = "True" ] && echo "major" || echo "minor")
+            printf "INFO: %-15s %-15s\n" "${version}" "${upgrade_type}"
+        done
+        echo "INFO: ----------------------------------------------------------------"
         return 1
     fi
-
-    echo -e "\nINFO: Version ${target_version} is a valid upgrade target \n"
-    return 0
 }
 ##-------------------------------------------------------------------------------------
 
 # function to determine if upgrade/patching path is MINOR or MAJOR #
 function check_upgrade_type() {
-    echo -e "\nINFO: Checking upgrade type..."
+
+    echo -e "\nChecking upgrade type..."
 
     # Extract major version numbers (family)
     current_engine_version_family=$(echo "$current_engine_version" | cut -d. -f1)
@@ -820,13 +914,25 @@ function check_upgrade_type() {
 # function to update PostgreSQL extensions
 function update_extensions() {
 
-   echo -e "\nINFO: Execute update_extensions function...\n"
+    echo -e "\nINFO: Execute update_extensions function...\n"
+
+    # Call helper function to validate db_name
+    check_db_name "${db_name}" || return $?
 
     # Create log file path
     local log_file="${LOGS_DIR}/${current_db_instance_id}/update_db_extensions_${DATE_TIME}.log"
 
     # Ensure log directory exists
     mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
+
+    # get DB creds from secret manager #
+    get_rds_creds || exit 1
+
+    # Check if DB credentials exist
+    if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
+        echo -e "\nERROR: Database credentials not found in secret manager. Please check and retry again. \n"
+        exit 1
+    fi
 
     # Start logging
     {
@@ -840,20 +946,11 @@ function update_extensions() {
         echo -e "\nINFO: Execute update_extensions function..."
         echo -e "INFO: Started at $(date)"
 
-        # get DB creds from secret manager #
-        get_rds_creds
-
-        # Check if DB credentials exist
-        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-            echo "ERROR: Database credentials not found in secret manager"
-            return 1
-        fi
-
         # Connect to the PostgreSQL database
         echo "INFO: Testing database connection..."
         if ! ${PSQL_BIN} -U "${db_username}" -h "${db_endpoint}" -p "${db_port}" -d "${db_name}" -c '\q' >/dev/null 2>&1; then
-            echo "ERROR: Failed to connect to the PostgreSQL database."
-            return 1
+            echo -e "\nERROR: Failed to connect to the PostgreSQL database. Please check and retry again. \n"
+            exit 1
         fi
         echo "INFO: Database connection successful"
 
@@ -896,8 +993,8 @@ function update_extensions() {
 EOF
 
         if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to update extensions"
-            return 1
+            echo -e "\nERROR: Failed to update extensions. Please check and retry again. \n"
+            exit 1
         fi
 
         echo -e "\nINFO: Extension update process completed at $(date)"
@@ -933,7 +1030,7 @@ function get_db_info() {
      current_engine_version_family=$(echo "${current_engine_version_family}" | cut -d. -f1)
      current_db_param_group=$(echo $instance_info | jq -r '.DBInstances[0].DBParameterGroups[0].DBParameterGroupName')
 
-     echo -e "\nINFO: Upgrade/Patching steps begin...\n"
+     echo -e "\nUpgrade/Patching steps begin...\n"
      echo "current_db_instance_id = $current_db_instance_id"
      echo "current_engine_type = $current_engine_type"
      echo "current_engine_version = $current_engine_version"
@@ -958,6 +1055,16 @@ echo ""
 ##-------------------------------------------------------------------------------------
 ##------------------------EXECUTE RDS-PostgreSQL UPGRADE/PATCHING TASKS----------------
 ##-------------------------------------------------------------------------------------
+
+# Check for unix functions #
+check_required_utils || exit 1
+
+# validate next engine version for numeric #
+next_engine_version=$(echo "${next_engine_version}" | bc) || {
+    echo -e "\nERROR: Invalid version number format: ${next_engine_version} \n"
+    exit 1
+}
+
 # run upgrade only when db status is available and there are no pending maintenace tasks #
 current_db_status=$( ${AWS_CLI} rds describe-db-instances --db-instance-identifier ${current_db_instance_id} --query 'DBInstances[0].[DBInstanceStatus]' --output text )
 echo "InitialDBStatus = ${current_db_status}"
@@ -982,11 +1089,11 @@ get_db_info
 if [ "${current_engine_type}" = "postgres" ]; then
 
     # call function to check if the next-engine-version is valid for the current rds-postgresql instance version #
-    check_rds_upgrade_version "${current_db_instance_id}" "${next_engine_version}"
-    if [ $? -ne 0 ]; then
-        #echo -e "\nERROR: Invalid next engine version provided. Upgrade can not proceed.\n"
+    #check_rds_upgrade_version "${current_db_instance_id}" "${next_engine_version}"
+    check_rds_upgrade_version "${current_db_instance_id}" "${next_engine_version}" || {
+        echo -e "\nERROR: Please select a valid upgrade version and try again. \n"
         exit 1
-    fi
+    }
 
     # call function to check if upgrade/patching path is MINOR or MAJOR #
     check_upgrade_type
@@ -1016,8 +1123,6 @@ if [ "${current_engine_type}" = "postgres" ]; then
 
     else # run_pre_upg_tasks = UPGRADE; perform upgrade/patching tasks
 
-        echo "INFO: DB Parameter Group Exists already. No need to create a new DB parameter group."
-        #UPGRADE_SCOPE="minor"
         db_param_group_name=${current_db_param_group}
         
         # take DB snapshot for MINOR version upgrade only; for MAJOR version, snapshot is taken automatically/default #
@@ -1070,7 +1175,7 @@ fi
 ##-------------------------------------------------------------------------------------
 
 # copy logs to s3 #
-# PSQSL database upgrade log file is available in CloudWatch and also will be avaibale in Splunk.
+# Note: RDS internal PostgreSQL database upgrade log file will be available in the RDS CloudWatch log group.
 copy_logs_to_s3
 
 # send email notification #

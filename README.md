@@ -121,6 +121,7 @@ This repository will guide you through setting up automation for pre-upgrade che
                      -- AWS CLI
                      -- PostgreSQL client utility
                      -- jq for JSON processing
+                     -- bc (basic calculator utility)
    
         ii. IAM profile attached to EC2 instance with necessary permissions.
    

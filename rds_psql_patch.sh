@@ -375,7 +375,7 @@ function db_upgrade() {
 
     # compare current engine version with next engine version #
     if [ "${current_db_engine_version_after}" = "${next_engine_version}" ]; then
-       echo -e "\nINFO: DB instance is upgraded to ${next_engine_version}. Upgrade is successful.\n"
+       echo -e "\nINFO: DB instance is upgraded to ${next_engine_version} from ${current_engine_version}. Upgrade is successful.\n"
     else
        echo -e "\nERROR: DB instance is not upgraded to ${next_engine_version}. Please check upgrade and database logs for more details.\n"
        exit 1

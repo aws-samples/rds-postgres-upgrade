@@ -6,17 +6,17 @@
 # Usage: ./rds_psql_patch.sh [db-instance-id] [next-engine-version] [run-pre-check]
 #        ./rds_psql_patch.sh [rds-psql-patch-test-1] [15.6] [PREUPGRADE|UPGRADE]
 #
-#       	PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
+#           PREUPGRADE = Run pre-requisite tasks, and do NOT run upgrade tasks
 #           UPGRADE = Do not run pre-requisite tasks, but run upgrade tasks
-#           
-#           Note: Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
-#                 for appropriate minor or major supported verion (a.k.a appropirate upgrade path)
 #
-# Note:  1. This script can be executed standalone, outside of SSM. It can also be integrated into CI/CD pipelines 
-#           like CodeCommit, Jenkins, and other.
-#        2. Standalone version has been tested, but it still needs to be tested throughly in your non-prod environment.
-#        3. If running standalone, set SNS topic and S3 bucket name in the envioronment if email notification is required and
-#           log files needs to be pushed and stored in S3 bucket. For e.g.:
+# Note: 
+#       1. Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
+#          for appropriate minor or major supported verion (a.k.a appropirate upgrade path) 
+$       2. This script can be executed standalone, outside of SSM. It can also be integrated into CI/CD pipelines 
+#          like CodeCommit, Jenkins, and other.
+#       3. Standalone version has been tested, but it still needs to be tested throughly in your non-prod environment.
+#       4. If running standalone, set SNS topic and S3 bucket name in the envioronment if email notification is required and
+#          log files needs to be pushed and stored in S3 bucket. For e.g.:
 #               export S3_BUCKET_PATCH_LOGS="rds-psql-patch-test1-s3"
 #               export SNS_TOPIC_ARN_EMAIL="arn:aws:sns:us-east-1:1234567890:rds-psql-patch-test-sns-topic"
 #
@@ -461,7 +461,7 @@ function db_pending_maint() {
 
 # function to retrieve DB creds from secret manager #
 function get_rds_creds() {
-    echo -e "\nINFO: Execute get_rds_creds function...\n"
+    echo -e "\nINFO: Execute get_rds_creds function... \n"
     
     # Call helper function to validate db_name
     check_db_name "${db_name}" || return $?
@@ -479,7 +479,7 @@ function get_rds_creds() {
 
     if [ -z "${secret_name}" ]; then
         echo -e "\nERROR: Could not find secret name in RDS tags. Please check secret and try again.\n"
-        exit 1
+        return 1
     fi
 
     # Get secret value
@@ -487,7 +487,7 @@ function get_rds_creds() {
     
     if [ -z "${SECRET_VALUE}" ]; then
         echo -e "\nERROR: Could not retrieve secret value. Please check secret and try again. \n"
-        exit 1
+        return 1
     fi
     
     # Extract username and password
@@ -498,7 +498,7 @@ function get_rds_creds() {
 
     if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
         echo -e "\nERROR: Could not extract username or password from secret. Check secret and try again.\n"
-        exit 1
+        return 1
     fi
 
     export PGPASSWORD="${db_password}"
@@ -507,13 +507,12 @@ function get_rds_creds() {
     
     return 0
 }
-
 ##-------------------------------------------------------------------------------------
 
 # run analyze in PSQL database #
 function run_psql_command() {
 
-    echo -e "\nINFO: Execute run_psql_command function...\n"
+    echo -e "\nINFO: Execute run_psql_command function to run task: ${1} ...\n"
 
     # Call helper function to validate db_name
     check_db_name "${db_name}" || return $?
@@ -525,9 +524,21 @@ function run_psql_command() {
     # Ensure log directory exists
     mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
 
+
     # Initialize command status
     local cmd_status=0
     local cmd=""
+
+    # Get DB credentials
+    get_rds_creds || exit 1
+
+    # Validate DB credentials
+    if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
+        echo -e "\nERROR: Database credentials NOT found. Command ${1} will NOT run. Please check and retry again. \n"
+        echo "----------------------------------------------------------------"
+        exit 1
+    fi
+    echo "INFO: Database credentials retrieved successfully."
 
     {
         echo "================================================================"
@@ -538,18 +549,6 @@ function run_psql_command() {
         echo "Database Name: ${db_name}"
         echo "Log File: ${log_file}"
         echo "----------------------------------------------------------------"
-
-        # Get DB credentials
-        echo "INFO: Retrieving database credentials..."
-        get_rds_creds
-
-        # Validate DB credentials
-        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-            echo -e "\nERROR: Database credentials NOT found. Command ${1} will NOT run. Please check and retry again. \n"
-            echo "----------------------------------------------------------------"
-            exit 1
-        fi
-        echo "INFO: Database credentials retrieved successfully."
 
         # Test database connection
         echo "INFO: Testing database connection..."
@@ -629,9 +628,24 @@ function run_psql_drop_repl_slot() {
 
     # Create log file path
     local log_file="${LOGS_DIR}/${current_db_instance_id}/replication_slot_${DATE_TIME}.log"
+    local exit_status=0
 
     # Ensure log directory exists
     mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
+
+    # Get DB credentials from secret manager
+    get_rds_creds || exit 1
+
+    # Validate DB credentials
+    if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
+        echo "ERROR: Database credentials NOT found."
+        echo "ERROR: [Replication Slots] Please check if the instance has replication slots. Major Version upgrade will fail if there are one or more replication slots."
+        echo "ERROR: [Extension check] Please check if there are extensions on older version which may not be compatible with target version. Major version will fail if there are extensions that are not compatible with target version."
+
+        echo "----------------------------------------------------------------"
+        exit 1
+    fi
+    echo "INFO: Database credentials retrieved successfully."
 
     {
         echo "================================================================"
@@ -640,21 +654,6 @@ function run_psql_drop_repl_slot() {
         echo "Database Instance: ${current_db_instance_id}"
         echo "Log File: ${log_file}"
         echo "----------------------------------------------------------------"
-
-        # Get DB credentials from secret manager
-        echo "INFO: Retrieving database credentials..."
-        get_rds_creds
-
-        # Validate DB credentials
-        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-            echo "ERROR: Database credentials NOT found."
-            echo "ERROR: [Replication Slots] Please check if the instance has replication slots. Major Version upgrade will fail if there are one or more replication slots."
-            echo "ERROR: [Extension check] Please check if there are extensions on older version which may not be compatible with target version. Major version will fail if there are extensions that are not compatible with target version."
-
-            echo "----------------------------------------------------------------"
-            exit 1
-        fi
-        echo "INFO: Database credentials retrieved successfully."
 
         # Check for existing replication slots
         echo "INFO: Checking for existing replication slots..."
@@ -876,7 +875,7 @@ check_rds_upgrade_version() {
 # function to determine if upgrade/patching path is MINOR or MAJOR #
 function check_upgrade_type() {
 
-    echo -e "\nINFO: Checking upgrade type..."
+    echo -e "\nChecking upgrade type..."
 
     # Extract major version numbers (family)
     current_engine_version_family=$(echo "$current_engine_version" | cut -d. -f1)
@@ -926,6 +925,15 @@ function update_extensions() {
     # Ensure log directory exists
     mkdir -p "${LOGS_DIR}/${current_db_instance_id}"
 
+    # get DB creds from secret manager #
+    get_rds_creds || exit 1
+
+    # Check if DB credentials exist
+    if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
+        echo -e "\nERROR: Database credentials not found in secret manager. Please check and retry again. \n"
+        exit 1
+    fi
+
     # Start logging
     {
         echo "================================================================"
@@ -937,15 +945,6 @@ function update_extensions() {
 
         echo -e "\nINFO: Execute update_extensions function..."
         echo -e "INFO: Started at $(date)"
-
-        # get DB creds from secret manager #
-        get_rds_creds
-
-        # Check if DB credentials exist
-        if [ -z "${db_username}" ] || [ "${db_username}" = "null" ] || [ -z "${db_password}" ] || [ "${db_password}" = "null" ]; then
-            echo -e "\nERROR: Database credentials not found in secret manager. Please check and retry again. \n"
-            exit 1
-        fi
 
         # Connect to the PostgreSQL database
         echo "INFO: Testing database connection..."
@@ -1031,7 +1030,7 @@ function get_db_info() {
      current_engine_version_family=$(echo "${current_engine_version_family}" | cut -d. -f1)
      current_db_param_group=$(echo $instance_info | jq -r '.DBInstances[0].DBParameterGroups[0].DBParameterGroupName')
 
-     echo -e "\nINFO: Upgrade/Patching steps begin...\n"
+     echo -e "\nUpgrade/Patching steps begin...\n"
      echo "current_db_instance_id = $current_db_instance_id"
      echo "current_engine_type = $current_engine_type"
      echo "current_engine_version = $current_engine_version"
@@ -1176,7 +1175,7 @@ fi
 ##-------------------------------------------------------------------------------------
 
 # copy logs to s3 #
-# PSQSL database upgrade log file is available in CloudWatch and also will be avaibale in Splunk.
+# Note: RDS internal PostgreSQL database upgrade log file will be available in the RDS CloudWatch log group.
 copy_logs_to_s3
 
 # send email notification #

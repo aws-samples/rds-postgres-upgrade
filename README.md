@@ -122,7 +122,14 @@ This repository will guide you through setting up automation for pre-upgrade che
                      -- PostgreSQL client utility
                      -- jq for JSON processing
                      -- bc (basic calculator utility)
+
+                   Below commands can be used to install these utilities if required.
    
+                       sudo yum install -y epel-release
+                       sudo yum install -y bc jq
+                       sudo yum install -y postgresql15
+                       which bc jq psql
+
         ii. IAM profile attached to EC2 instance with necessary permissions.
    
                 - Refer to [create_rds_psql_instance_cfn.yaml] file for required permissions.

@@ -51,7 +51,7 @@ Parameters:
     Description: Email address for SNS topic subscription
     AllowedPattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
     ConstraintDescription: Must be a valid email address
-  
+
 Resources:
   # VPC and Networking Components
   VPC:
@@ -200,6 +200,16 @@ Resources:
           ToPort: 22
           CidrIp: !Ref VpcCIDR
           Description: Management access
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS outbound for SSM
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTP outbound for package updates
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-EC2-SG
@@ -371,6 +381,7 @@ Resources:
       InstanceType: t3.micro
       SecurityGroupIds:
         - !Ref EC2SecurityGroup
+        - !Ref RDSSecurityGroup
       SubnetId: !Ref PrivateSubnet1
       UserData: !Base64
         Fn::Sub: |
@@ -445,6 +456,92 @@ Resources:
         PasswordLength: 18
         ExcludeCharacters: '"@/\'''
         ExcludePunctuation: true
+
+
+  # Gateway endpoint for the  script S3 endpoint
+  S3GatewayEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcEndpointType: 'Gateway'
+      VpcId: !Ref VPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !Sub 'arn:aws:s3:::${BucketNamePrefix}-${AWS::Region}-${AWS::AccountId}/*'
+              - !Sub 'arn:aws:s3:::${BucketNamePrefix}-${AWS::Region}-${AWS::AccountId}'
+          # Gateway endpoint for the AmazonLinux yum repository S3 bucket
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:GetObject
+            Resource:
+              - !Sub 'arn:aws:s3:::al2023-repos-${AWS::Region}-de612dc2/*'
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  # VPC Endpoint Security Group
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VPC Endpoints
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref VpcCIDR
+          Description: HTTPS from VPC CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-VPCEndpoint-SG
+  # SSM VPC Endpoints
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  SSMMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  EC2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
 
 Outputs:
   VpcId:

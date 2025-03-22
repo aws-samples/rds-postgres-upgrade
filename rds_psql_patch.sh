@@ -12,7 +12,7 @@
 # Note: 
 #       1. Review this document [https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html]
 #          for appropriate minor or major supported verion (a.k.a appropirate upgrade path) 
-$       2. This script can be executed standalone, outside of SSM. It can also be integrated into CI/CD pipelines 
+#       2. This script can be executed standalone, outside of SSM. It can also be integrated into CI/CD pipelines 
 #          like CodeCommit, Jenkins, and other.
 #       3. Standalone version has been tested, but it still needs to be tested throughly in your non-prod environment.
 #       4. If running standalone, set SNS topic and S3 bucket name in the envioronment if email notification is required and
@@ -518,7 +518,7 @@ function run_psql_command() {
     check_db_name "${db_name}" || return $?
 
     # Create log file path
-    local log_file="${LOGS_DIR}/${current_db_instance_id}/run_db_task_${1,,}-${DATE_TIME}.log"
+    local log_file="${LOGS_DIR}/${current_db_instance_id}/${run_pre_upg_tasks}-run_db_task_${1,,}-${DATE_TIME}.log"
     # ${LOGS_DIR}/${current_db_instance_id}/${current_db_instance_id}-[analyze|freeze|unfreeze]-${DATE_TIME}.log
 
     # Ensure log directory exists
@@ -627,7 +627,7 @@ function run_psql_drop_repl_slot() {
     check_db_name "${db_name}" || return $?
 
     # Create log file path
-    local log_file="${LOGS_DIR}/${current_db_instance_id}/replication_slot_${DATE_TIME}.log"
+    local log_file="${LOGS_DIR}/${current_db_instance_id}/${run_pre_upg_tasks}-replication_slot_${DATE_TIME}.log"
     local exit_status=0
 
     # Ensure log directory exists
@@ -920,7 +920,7 @@ function update_extensions() {
     check_db_name "${db_name}" || return $?
 
     # Create log file path
-    local log_file="${LOGS_DIR}/${current_db_instance_id}/update_db_extensions_${DATE_TIME}.log"
+    local log_file="${LOGS_DIR}/${current_db_instance_id}/${run_pre_upg_tasks}-update_db_extensions_${DATE_TIME}.log"
 
     # Ensure log directory exists
     mkdir -p "${LOGS_DIR}/${current_db_instance_id}"

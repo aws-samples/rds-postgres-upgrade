@@ -343,27 +343,29 @@ Below log files will be generated in the logs directory for each option
 
 <br>
 
-### PREUPGRADE
+### Summary of logs for PREUPGRADE
 
-| Log File Type | Purpose | Sample File Name |
-|---------------|---------|-------------------|
-| Master Log | Master log file that will have log summary (highlights) for each database pre-upgrade activity | upgrade_master-20250118-02-04-15.log |
-| Pre-upgrade Execution Log | Main execution log for pre-upgrade tasks | preupgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
-| Freeze Task Log | Log of VACUUM FREEZE command execution | run_db_task_freeze-20230615-14-30-45.log |
-| Replication Slot Log | Log of replication slot operation (major upgrades only) | replication_slot_20230615-14-30-45.log |
+|Log File Type|Sample File Name|Directory Path|Frequency|Purpose
+|---------------|---------------|-------------------|-------------------|-------------------           
+|Master Log|PREUPGRADE-master-20250321-21-55-51.log|[script-dir] is the directory where “rds-psql-patch.sh” is saved|Each run|General information on pre-upgrade job tasks
+|Pre-upgrade Status log|PREUPGRADE-status|[script-dir]/logs|Each run|Pre-upgrade Job status
+|Pre-upgrade Execution Log|PREUPGRADE-20250321-21-51-48.log|[script-dir]/logs/[dbname]|Each run|Detail view of all pre-upgrade tasks
+|Freeze Task Log|PREUPGRADE-run_db_task_freeze-20250321-21-55-52.log|<script-dir>/logs/[dbname]|Each run|Log on Vacuum Freeze
+|Replication Slot Log|PREUPGRADE-replication_slot_20250321-21-55-52.log|[script-dir]/logs/[dbname>]For Major Version Upgrade only|Current Replication slot status and recommendations on actions to take before major version upgrade
 
 <br>
 
-### UPGRADE
+### Summary of logs for UPGRADE
 
-| Log File Type | Purpose | Sample File Name |
-|---------------|---------|-------------------|
-| Master Log | Master log file that will have log summary (highlights) for each database upgrade activity | upgrade_master-20250118-02-04-15.log |
-| Upgrade Execution Log | Main execution log for upgrade tasks | upgrade-rds-psql-patch-test-1-20230615-14-30-45.out |
-| Current DB Configuration Backup | Backup of current DB configuration before upgrade | db_current_config_backup_postgres15-20230615-14-30-45.txt |
-| Replication Slot Log | Log of replication slot operation (major upgrades only) | replication_slot_20230615-14-30-45.log |
-| Extension Update Log | Log of PostgreSQL extension updates | update_db_extensions_20230615-14-30-45.log |
-| Analyze Task Log | Log of ANALYZE command execution | run_db_task_analyze-20230615-14-30-45.log |
+|Log File Type|Sample File Name|Directory Path|Frequency|Purpose/Error information
+|---------------|---------------|-------------------|-------------------|-------------------           
+|Master Log|UPGRADE-master-20250321-22-16-11.log|[script-dir]/logs|Each run|General information on upgrade tasks
+|Upgrade Status log|UPGRADE-status|[script-dir]/logs/[dbname]|Each run|Upgrade Job Status
+|Upgrade Execution Log|UPGRADE-20250321-22-16-11.log|[script-dir]/logs/[dbname]|Each run|Detail view of all Upgrade tasks
+|Current DB Configuration Backup|db_current_config_backup_postgres15-20250321-22-16-12.txt|[script-dir]/logs/<dbname>|Each run|Backup of current DB configuration 
+|Replication Slot Log|UPGRADE-replication_slot_20250321-22-16-12.log|[script-dir]/logs/[dbname]|For Major Version Upgrade Only|Current replication slot status and recommendations on actions to take before major version upgrade
+|Extension Update Log|UPGRADE-update_db_extensions_20250321-22-16-12.log|[script-dir]/logs/[dbname]|Each run|Log on PostgreSQL extension updates
+|Analyze Task Log|UPGRADE-run_db_task_analyze-20250321-22-16-12.log|[script-dir]/logs/[dbname]|Each run|Log on ANALYZE command execution
 
 <br>
 

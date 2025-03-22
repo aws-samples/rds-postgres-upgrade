@@ -100,6 +100,7 @@ Resources:
                     # Setup environment
                     export AWS_REGION="{{ global:REGION }}"
                     export AWS_DEFAULT_REGION="{{ global:REGION }}"
+                    export RunPreUpgradeTasks="{{ RunPreUpgradeTasks }}"
 
                     # Create directory
                     mkdir -p {{ ScriptsDirOnEC2 }}
@@ -131,15 +132,16 @@ Resources:
                     # Setup environment
                     export AWS_REGION="{{ global:REGION }}"
                     export AWS_DEFAULT_REGION="{{ global:REGION }}"
+                    export RunPreUpgradeTasks="{{ RunPreUpgradeTasks }}"
 
                     # Create logs directory with timestamp suffix
                     TIMESTAMP=$(date '+%Y%m%d-%H-%M-%S')
                     LOGS_DIR="{{ ScriptsDirOnEC2 }}/logs"
-                    MASTER_LOG="${LOGS_DIR}/upgrade_master-${TIMESTAMP}.log"
+                    MASTER_LOG="${LOGS_DIR}/${RunPreUpgradeTasks}-master-${TIMESTAMP}.log"
                     mkdir -p "${LOGS_DIR}"
 
                     # Store instance list in a file to ensure consistency
-                    INSTANCE_LIST_FILE="${LOGS_DIR}/instance_list.txt"
+                    INSTANCE_LIST_FILE="${LOGS_DIR}/${RunPreUpgradeTasks}-instance_list.txt"
 
                     log_message() {
                         local instance="$1"
@@ -179,17 +181,17 @@ Resources:
                     while IFS= read -r INSTANCE || [[ -n "$INSTANCE" ]]; do
                       INSTANCE_LOG_DIR="${LOGS_DIR}/${INSTANCE}"
                       mkdir -p "${INSTANCE_LOG_DIR}"
-                      INSTANCE_LOG="${INSTANCE_LOG_DIR}/upgrade-${TIMESTAMP}.log"
+                      INSTANCE_LOG="${INSTANCE_LOG_DIR}/${RunPreUpgradeTasks}-${TIMESTAMP}.log"
 
                       (
                         cd "${SCRIPTS_DIR}"
                         log_message "${INSTANCE}" "Starting upgrade process" "${INSTANCE_LOG}"
                         if ./rds_psql_patch.sh "${INSTANCE}" "{{ TargetEngineVersion }}" "{{ RunPreUpgradeTasks }}" >> "${INSTANCE_LOG}" 2>&1; then
-                          log_message "${INSTANCE}" "{ RunPreUpgradeTasks } completed." "${INSTANCE_LOG}"
-                          echo "SUCCESS" > "${INSTANCE_LOG_DIR}/status"
+                          log_message "${INSTANCE}" "${RunPreUpgradeTasks} completed." "${INSTANCE_LOG}"
+                          echo "SUCCESS" > "${INSTANCE_LOG_DIR}/${RunPreUpgradeTasks}-status"
                         else
-                          log_message "${INSTANCE}" "{ RunPreUpgradeTasks } failed" "${INSTANCE_LOG}"
-                          echo "FAILED" > "${INSTANCE_LOG_DIR}/status"
+                          log_message "${INSTANCE}" "${RunPreUpgradeTasks} failed" "${INSTANCE_LOG}"
+                          echo "FAILED" > "${INSTANCE_LOG_DIR}/${RunPreUpgradeTasks}-status"
                           exit 1
                         fi
                       ) &
@@ -212,7 +214,7 @@ Resources:
                     # Logging summary for each instance
                     while IFS= read -r INSTANCE || [[ -n "$INSTANCE" ]]; do
                       INSTANCE_LOG_DIR="${LOGS_DIR}/${INSTANCE}"
-                      INSTANCE_LOG="${INSTANCE_LOG_DIR}/upgrade-${TIMESTAMP}.log"
+                      INSTANCE_LOG="${INSTANCE_LOG_DIR}/${RunPreUpgradeTasks}-${TIMESTAMP}.log"
                       
                       if [ -f "${INSTANCE_LOG}" ]; then
                         log_message "MASTER" "" "${MASTER_LOG}"
@@ -224,8 +226,8 @@ Resources:
                         log_message "MASTER" "" "${MASTER_LOG}"
 
                         # Check instance status
-                        if [ -f "${INSTANCE_LOG_DIR}/status" ]; then
-                          STATUS=$(cat "${INSTANCE_LOG_DIR}/status")
+                        if [ -f "${INSTANCE_LOG_DIR}/${RunPreUpgradeTasks}-status" ]; then
+                          STATUS=$(cat "${INSTANCE_LOG_DIR}/${RunPreUpgradeTasks}-status")
                           if [ "${STATUS}" = "FAILED" ]; then
                             FAILED_INSTANCES="${FAILED_INSTANCES} ${INSTANCE}"
                           fi
@@ -241,9 +243,9 @@ Resources:
                     done < "${INSTANCE_LIST_FILE}"
 
                     if [ $EXIT_STATUS -eq 0 ] && [ -z "${FAILED_INSTANCES}" ]; then
-                      log_message "MASTER" "INFO: All { RunPreUpgradeTasks } tasks completed." "${MASTER_LOG}"
+                      log_message "MASTER" "INFO: All ${RunPreUpgradeTasks} tasks completed." "${MASTER_LOG}"
                     else
-                      log_message "MASTER" "ERROR: Some { RunPreUpgradeTasks } tasks failed. Failed instances:${FAILED_INSTANCES}" "${MASTER_LOG}"
+                      log_message "MASTER" "ERROR: Some ${RunPreUpgradeTasks} tasks failed. Failed instances:${FAILED_INSTANCES}" "${MASTER_LOG}"
                     fi
 
                     if [ -n "{{ S3BucketName }}" ]; then

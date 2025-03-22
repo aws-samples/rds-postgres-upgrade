@@ -351,7 +351,7 @@ Below log files will be generated in the logs directory for each option
 |Pre-upgrade Status log|PREUPGRADE-status|[script-dir]/logs|Each run|Pre-upgrade Job status
 |Pre-upgrade Execution Log|PREUPGRADE-20250321-21-51-48.log|[script-dir]/logs/[dbname]|Each run|Detail view of all pre-upgrade tasks
 |Freeze Task Log|PREUPGRADE-run_db_task_freeze-20250321-21-55-52.log|<script-dir>/logs/[dbname]|Each run|Log on Vacuum Freeze
-|Replication Slot Log|PREUPGRADE-replication_slot_20250321-21-55-52.log|[script-dir]/logs/[dbname>]For Major Version Upgrade only|Current Replication slot status and recommendations on actions to take before major version upgrade
+|Replication Slot Log|PREUPGRADE-replication_slot_20250321-21-55-52.log|[script-dir]/logs/[dbname>]|For Major Version Upgrade only|Current Replication slot status and recommendations on actions to take before major version upgrade
 
 <br>
 

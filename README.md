@@ -334,6 +334,8 @@ Use the same password that is in the "<RDS Instance ID>-maintenance-user-secret"
 Note: 
 1. To create a replication slot in an RDS PostgreSQL instance, set rds.logical_replication=1 in the RDS instance parameter file and reboot the instance.
 2. Then, use the command like "SELECT pg_create_logical_replication_slot('slot_psql_patch_test','test_decoding');" to create a replication slot.
+3. If one or few RDS database instances fail during a fleet upgrade (for e.g. 100 instances), the SSM automation job status will be marked as "failed".
+   The logs will clearly indicate which specific instances failed, allowing you to investigate and potentially retry just those instances.
 
 <br>
 
